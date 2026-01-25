@@ -1,0 +1,80 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+version: 2
+
+project_name: ableton-osc-mcp
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: ableton-osc-mcp
+    main: .
+    binary: ableton-osc-mcp
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      # Windows ARM64 is rare, skip it
+      - goos: windows
+        goarch: arm64
+      # Linux ARM64 is less common for DAW users, but keep it for now
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+archives:
+  - id: binary
+    format: binary
+    name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}{{ if eq .Os \"windows\" }}.exe{{ end }}"
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "Merge pull request"
+      - "Merge branch"
+
+release:
+  github:
+    owner: nozomi-koborinai
+    name: ableton-osc-mcp
+  draft: false
+  prerelease: auto
+  mode: replace
+  name_template: "{{.Tag}}"
+
+brews:
+  - name: ableton-osc-mcp
+    repository:
+      owner: nozomi-koborinai
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    commit_author:
+      name: github-actions[bot]
+      email: github-actions[bot]@users.noreply.github.com
+    commit_msg_template: "chore: update {{ .ProjectName }} to {{ .Tag }}"
+    directory: Formula
+    homepage: "https://github.com/nozomi-koborinai/ableton-osc-mcp"
+    description: "MCP server for controlling Ableton Live via AbletonOSC"
+    license: "MIT"
+    install: |
+      bin.install Dir["ableton-osc-mcp*"].first => "ableton-osc-mcp"
+    test: |
+      assert_predicate bin/"ableton-osc-mcp", :executable?
