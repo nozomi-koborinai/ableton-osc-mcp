@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Download deps
+        run: go mod download
+
+      - name: Check gofmt
+        run: |
+          fmt_out=$(gofmt -l $(go list -f '{{.Dir}}' ./...))
+          if [ -n "$fmt_out" ]; then
+            echo "gofmt needed:"
+            echo "$fmt_out"
+            exit 1
+          fi
+
+      - name: Go vet
+        run: go vet ./...
+
+      - name: Tests
+        run: go test ./...
+
+      - name: Build
+        run: go build ./...
+
+      - name: Install static analysis tools
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@latest
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Staticcheck
+        run: staticcheck ./...
+
+      - name: Govulncheck
+        run: govulncheck ./...
+
+      - name: Golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: latest
