@@ -6,16 +6,22 @@ An MCP (Model Context Protocol) server for controlling **Ableton Live 11+** via 
 
 This enables AI assistants (Claude, Cursor, etc.) to interact with Ableton Live for beat-making, music production, and creative workflows.
 
-> **Note**: If you don't see a Homebrew formula or GitHub Release yet, use **Option C: Build from source** below.
-
 ## Features
 
 - Control Ableton Live from AI assistants via MCP
 - Create MIDI tracks and clips
 - Add, read, and clear MIDI notes
 - Get/set tempo
+- List devices on a track
 - Fire clip slots
 - Send raw OSC messages for advanced control
+
+## Limitations (and why)
+
+- **Loading devices from Live's Browser (e.g., Drum Rack)** is **not supported** by the standard AbletonOSC API.
+  This MCP only talks to Ableton Live via AbletonOSC, so it can only do what AbletonOSC exposes.
+- To automate device loading, **AbletonOSC's Remote Script must be extended** with a custom OSC endpoint
+  that calls Live's Browser `load_item()` API. This is outside the scope of the default AbletonOSC install.
 
 ## How it Works
 
@@ -208,6 +214,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `ableton_get_tempo` | Get current tempo (BPM) |
 | `ableton_set_tempo` | Set tempo (BPM) |
 | `ableton_get_track_names` | List track names |
+| `ableton_get_track_devices` | List devices on a track |
 | `ableton_create_midi_track` | Create a new MIDI track |
 | `ableton_create_clip` | Create a new clip in a slot |
 | `ableton_get_clip_notes` | Get MIDI notes from a clip |

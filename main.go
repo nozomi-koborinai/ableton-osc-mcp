@@ -48,6 +48,7 @@ func main() {
 		tools.NewAbletonGetTempo(g, ableton),
 		tools.NewAbletonSetTempo(g, ableton),
 		tools.NewAbletonGetTrackNames(g, ableton),
+		tools.NewAbletonGetTrackDevices(g, ableton),
 		tools.NewAbletonCreateMidiTrack(g, ableton),
 		tools.NewAbletonCreateClip(g, ableton),
 		tools.NewAbletonGetClipNotes(g, ableton),
