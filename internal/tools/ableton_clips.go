@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -41,7 +42,8 @@ type ClearedOutput struct {
 type AddMidiNotesInput struct {
 	TrackIndex int        `json:"track_index" jsonschema:"minimum=0"`
 	ClipIndex  int        `json:"clip_index" jsonschema:"minimum=0"`
-	Notes      []MidiNote `json:"notes" jsonschema:"description=Notes to add,minItems=1"`
+	Notes      []MidiNote `json:"notes,omitempty" jsonschema:"description=Notes to add as array"`
+	NotesJson  string     `json:"notes_json,omitempty" jsonschema:"description=Notes as JSON string (alternative to notes array). Format: [{pitch:60,start_time:0,duration:0.5,velocity:100}]"`
 }
 
 type AddedOutput struct {
@@ -225,11 +227,20 @@ func NewAbletonAddMidiNotes(g *genkit.Genkit, client *abletonosc.Client) ai.Tool
 			if err := validateTrackClipIndices(input.TrackIndex, input.ClipIndex); err != nil {
 				return AddedOutput{}, err
 			}
-			if len(input.Notes) == 0 {
-				return AddedOutput{}, errors.New("notes must not be empty")
+
+			// Parse notes from JSON string if notes array is empty but notes_json is provided
+			notes := input.Notes
+			if len(notes) == 0 && input.NotesJson != "" {
+				if err := json.Unmarshal([]byte(input.NotesJson), &notes); err != nil {
+					return AddedOutput{}, fmt.Errorf("failed to parse notes_json: %w", err)
+				}
+			}
+
+			if len(notes) == 0 {
+				return AddedOutput{}, errors.New("notes must not be empty (provide either 'notes' array or 'notes_json' string)")
 			}
 			args := []interface{}{int32(input.TrackIndex), int32(input.ClipIndex)}
-			for _, n := range input.Notes {
+			for _, n := range notes {
 				if n.Pitch < 0 || n.Pitch > 127 {
 					return AddedOutput{}, errors.New("pitch must be 0..127")
 				}
@@ -257,7 +268,7 @@ func NewAbletonAddMidiNotes(g *genkit.Genkit, client *abletonosc.Client) ai.Tool
 			if err := client.Send("/live/clip/add/notes", args...); err != nil {
 				return AddedOutput{}, err
 			}
-			return AddedOutput{Added: len(input.Notes)}, nil
+			return AddedOutput{Added: len(notes)}, nil
 		},
 	)
 }

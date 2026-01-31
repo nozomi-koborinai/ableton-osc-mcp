@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 type RawOscSendInput struct {
 	Address    string   `json:"address" jsonschema:"description=OSC address to send (e.g. /live/song/get/tempo)"`
 	Args       []string `json:"args,omitempty" jsonschema:"description=Args as strings; auto-parsed to int/float/bool/string"`
+	ArgsJson   string   `json:"args_json,omitempty" jsonschema:"description=Args as JSON string array (alternative to args). Format: [\"arg1\", \"arg2\"]"`
 	AwaitReply *bool    `json:"await_reply,omitempty"`
 	TimeoutMs  *int     `json:"timeout_ms,omitempty" jsonschema:"minimum=1,maximum=10000"`
 }
@@ -35,8 +37,16 @@ func NewAbletonOscSend(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
 			}
 			timeout := time.Duration(timeoutMs) * time.Millisecond
 
-			args := make([]interface{}, 0, len(input.Args))
-			for _, s := range input.Args {
+			// Parse args from JSON string if args array is empty but args_json is provided
+			inputArgs := input.Args
+			if len(inputArgs) == 0 && input.ArgsJson != "" {
+				if err := json.Unmarshal([]byte(input.ArgsJson), &inputArgs); err != nil {
+					return RawOscSendOutput{}, errors.New("failed to parse args_json: " + err.Error())
+				}
+			}
+
+			args := make([]interface{}, 0, len(inputArgs))
+			for _, s := range inputArgs {
 				args = append(args, abletonosc.ParseArg(s))
 			}
 
