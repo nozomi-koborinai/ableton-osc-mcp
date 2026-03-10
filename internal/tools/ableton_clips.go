@@ -11,6 +11,23 @@ import (
 	"github.com/nozomi-koborinai/ableton-osc-mcp/internal/abletonosc"
 )
 
+type StopClipInput struct {
+	TrackIndex int `json:"track_index" jsonschema:"minimum=0"`
+	ClipIndex  int `json:"clip_index" jsonschema:"minimum=0"`
+}
+
+type DuplicateClipToInput struct {
+	TrackIndex      int `json:"track_index" jsonschema:"minimum=0"`
+	ClipIndex       int `json:"clip_index" jsonschema:"minimum=0"`
+	TargetClipIndex int `json:"target_clip_index" jsonschema:"description=Target clip slot index to duplicate to,minimum=0"`
+}
+
+type SetClipNameInput struct {
+	TrackIndex int    `json:"track_index" jsonschema:"minimum=0"`
+	ClipIndex  int    `json:"clip_index" jsonschema:"minimum=0"`
+	Name       string `json:"name" jsonschema:"description=New clip name"`
+}
+
 type CreateClipInput struct {
 	TrackIndex  int     `json:"track_index" jsonschema:"minimum=0"`
 	ClipIndex   int     `json:"clip_index" jsonschema:"minimum=0"`
@@ -269,6 +286,55 @@ func NewAbletonAddMidiNotes(g *genkit.Genkit, client *abletonosc.Client) ai.Tool
 				return AddedOutput{}, err
 			}
 			return AddedOutput{Added: len(notes)}, nil
+		},
+	)
+}
+
+func NewAbletonStopClip(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
+	return genkit.DefineTool(g, "ableton_stop_clip", "Ableton Live: stop a clip",
+		func(_ *ai.ToolContext, input StopClipInput) (SentOutput, error) {
+			if err := validateTrackClipIndices(input.TrackIndex, input.ClipIndex); err != nil {
+				return SentOutput{}, err
+			}
+			if err := client.Send("/live/clip/stop", int32(input.TrackIndex), int32(input.ClipIndex)); err != nil {
+				return SentOutput{}, err
+			}
+			return SentOutput{Sent: true}, nil
+		},
+	)
+}
+
+func NewAbletonDuplicateClipTo(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
+	return genkit.DefineTool(g, "ableton_duplicate_clip_to", "Ableton Live: duplicate clip to another slot",
+		func(_ *ai.ToolContext, input DuplicateClipToInput) (SentOutput, error) {
+			if err := validateTrackClipIndices(input.TrackIndex, input.ClipIndex); err != nil {
+				return SentOutput{}, err
+			}
+			if input.TargetClipIndex < 0 {
+				return SentOutput{}, errors.New("target_clip_index must be >= 0")
+			}
+			if err := client.Send("/live/clip_slot/duplicate_clip_to",
+				int32(input.TrackIndex),
+				int32(input.ClipIndex),
+				int32(input.TargetClipIndex),
+			); err != nil {
+				return SentOutput{}, err
+			}
+			return SentOutput{Sent: true}, nil
+		},
+	)
+}
+
+func NewAbletonSetClipName(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
+	return genkit.DefineTool(g, "ableton_set_clip_name", "Ableton Live: set clip name",
+		func(_ *ai.ToolContext, input SetClipNameInput) (SentOutput, error) {
+			if err := validateTrackClipIndices(input.TrackIndex, input.ClipIndex); err != nil {
+				return SentOutput{}, err
+			}
+			if err := client.Send("/live/clip/set/name", int32(input.TrackIndex), int32(input.ClipIndex), input.Name); err != nil {
+				return SentOutput{}, err
+			}
+			return SentOutput{Sent: true}, nil
 		},
 	)
 }
