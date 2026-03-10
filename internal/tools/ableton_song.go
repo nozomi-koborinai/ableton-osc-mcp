@@ -191,7 +191,7 @@ func NewAbletonSetSongKey(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
 			if err := client.Send("/live/song/set/scale_name", input.ScaleName); err != nil {
 				return SongKeyOutput{}, err
 			}
-			return SongKeyOutput{RootNote: input.RootNote, ScaleName: input.ScaleName}, nil
+			return SongKeyOutput(input), nil
 		},
 	)
 }
@@ -228,7 +228,7 @@ func NewAbletonSetMetronome(g *genkit.Genkit, client *abletonosc.Client) ai.Tool
 			if err := client.Send("/live/song/set/metronome", val); err != nil {
 				return MetronomeOutput{}, err
 			}
-			return MetronomeOutput{Enabled: input.Enabled}, nil
+			return MetronomeOutput(input), nil
 		},
 	)
 }

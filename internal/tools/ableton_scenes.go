@@ -18,6 +18,10 @@ type SetSceneNameInput struct {
 	Name       string `json:"name" jsonschema:"description=New scene name"`
 }
 
+type DuplicateSceneInput struct {
+	SceneIndex int `json:"scene_index" jsonschema:"minimum=0"`
+}
+
 type CreateSceneInput struct {
 	SceneIndex *int `json:"scene_index,omitempty" jsonschema:"description=Index to insert scene at (-1 to append),minimum=-1"`
 }
@@ -85,7 +89,7 @@ func NewAbletonCreateScene(g *genkit.Genkit, client *abletonosc.Client) ai.Tool 
 
 func NewAbletonDuplicateScene(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
 	return genkit.DefineTool(g, "ableton_duplicate_scene", "Ableton Live: duplicate a scene",
-		func(_ *ai.ToolContext, input FireSceneInput) (NumScenesOutput, error) {
+		func(_ *ai.ToolContext, input DuplicateSceneInput) (NumScenesOutput, error) {
 			if input.SceneIndex < 0 {
 				return NumScenesOutput{}, errors.New("scene_index must be >= 0")
 			}
