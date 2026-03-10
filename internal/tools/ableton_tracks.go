@@ -10,6 +10,21 @@ import (
 	"github.com/nozomi-koborinai/ableton-osc-mcp/internal/abletonosc"
 )
 
+type SetTrackNameInput struct {
+	TrackIndex int    `json:"track_index" jsonschema:"minimum=0"`
+	Name       string `json:"name" jsonschema:"description=New track name"`
+}
+
+type TrackBoolInput struct {
+	TrackIndex int  `json:"track_index" jsonschema:"minimum=0"`
+	Value      bool `json:"value" jsonschema:"description=true to enable; false to disable"`
+}
+
+type SetTrackVolumeInput struct {
+	TrackIndex int     `json:"track_index" jsonschema:"minimum=0"`
+	Volume     float64 `json:"volume" jsonschema:"description=Volume (0.0=silence to 1.0=0dB),minimum=0,maximum=1"`
+}
+
 type TrackNamesInput struct {
 	IndexMin *int `json:"index_min,omitempty" jsonschema:"description=Optional start index,minimum=0"`
 	IndexMax *int `json:"index_max,omitempty" jsonschema:"description=Optional end index (exclusive),minimum=1"`
@@ -92,6 +107,91 @@ func NewAbletonCreateMidiTrack(g *genkit.Genkit, client *abletonosc.Client) ai.T
 				return NumTracksOutput{}, err
 			}
 			return NumTracksOutput{NumTracks: n}, nil
+		},
+	)
+}
+
+func NewAbletonSetTrackName(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
+	return genkit.DefineTool(g, "ableton_set_track_name", "Ableton Live: set track name",
+		func(_ *ai.ToolContext, input SetTrackNameInput) (SentOutput, error) {
+			if input.TrackIndex < 0 {
+				return SentOutput{}, errors.New("track_index must be >= 0")
+			}
+			if err := client.Send("/live/track/set/name", int32(input.TrackIndex), input.Name); err != nil {
+				return SentOutput{}, err
+			}
+			return SentOutput{Sent: true}, nil
+		},
+	)
+}
+
+func NewAbletonMuteTrack(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
+	return genkit.DefineTool(g, "ableton_mute_track", "Ableton Live: mute or unmute a track",
+		func(_ *ai.ToolContext, input TrackBoolInput) (SentOutput, error) {
+			if input.TrackIndex < 0 {
+				return SentOutput{}, errors.New("track_index must be >= 0")
+			}
+			val := int32(0)
+			if input.Value {
+				val = 1
+			}
+			if err := client.Send("/live/track/set/mute", int32(input.TrackIndex), val); err != nil {
+				return SentOutput{}, err
+			}
+			return SentOutput{Sent: true}, nil
+		},
+	)
+}
+
+func NewAbletonSoloTrack(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
+	return genkit.DefineTool(g, "ableton_solo_track", "Ableton Live: solo or unsolo a track",
+		func(_ *ai.ToolContext, input TrackBoolInput) (SentOutput, error) {
+			if input.TrackIndex < 0 {
+				return SentOutput{}, errors.New("track_index must be >= 0")
+			}
+			val := int32(0)
+			if input.Value {
+				val = 1
+			}
+			if err := client.Send("/live/track/set/solo", int32(input.TrackIndex), val); err != nil {
+				return SentOutput{}, err
+			}
+			return SentOutput{Sent: true}, nil
+		},
+	)
+}
+
+func NewAbletonArmTrack(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
+	return genkit.DefineTool(g, "ableton_arm_track", "Ableton Live: arm or disarm a track for recording",
+		func(_ *ai.ToolContext, input TrackBoolInput) (SentOutput, error) {
+			if input.TrackIndex < 0 {
+				return SentOutput{}, errors.New("track_index must be >= 0")
+			}
+			val := int32(0)
+			if input.Value {
+				val = 1
+			}
+			if err := client.Send("/live/track/set/arm", int32(input.TrackIndex), val); err != nil {
+				return SentOutput{}, err
+			}
+			return SentOutput{Sent: true}, nil
+		},
+	)
+}
+
+func NewAbletonSetTrackVolume(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
+	return genkit.DefineTool(g, "ableton_set_track_volume", "Ableton Live: set track volume (0.0=silence, 0.85=0dB, 1.0=+6dB)",
+		func(_ *ai.ToolContext, input SetTrackVolumeInput) (SentOutput, error) {
+			if input.TrackIndex < 0 {
+				return SentOutput{}, errors.New("track_index must be >= 0")
+			}
+			if input.Volume < 0 || input.Volume > 1 {
+				return SentOutput{}, errors.New("volume must be 0.0 to 1.0")
+			}
+			if err := client.Send("/live/track/set/volume", int32(input.TrackIndex), float32(input.Volume)); err != nil {
+				return SentOutput{}, err
+			}
+			return SentOutput{Sent: true}, nil
 		},
 	)
 }

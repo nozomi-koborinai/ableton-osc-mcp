@@ -42,19 +42,53 @@ func main() {
 	}()
 
 	toolList := []ai.Tool{
+		// Song / Transport
 		tools.NewAbletonTest(g, ableton),
 		tools.NewAbletonShowMessage(g, ableton),
 		tools.NewAbletonGetVersion(g, ableton),
 		tools.NewAbletonGetTempo(g, ableton),
 		tools.NewAbletonSetTempo(g, ableton),
+		tools.NewAbletonPlay(g, ableton),
+		tools.NewAbletonStop(g, ableton),
+		tools.NewAbletonStopAllClips(g, ableton),
+		tools.NewAbletonSetSongKey(g, ableton),
+		tools.NewAbletonSessionRecord(g, ableton),
+		tools.NewAbletonCaptureMidi(g, ableton),
+		tools.NewAbletonSetMetronome(g, ableton),
+
+		// Tracks
 		tools.NewAbletonGetTrackNames(g, ableton),
 		tools.NewAbletonGetTrackDevices(g, ableton),
 		tools.NewAbletonCreateMidiTrack(g, ableton),
+		tools.NewAbletonCreateAudioTrack(g, ableton),
+		tools.NewAbletonSetTrackName(g, ableton),
+		tools.NewAbletonMuteTrack(g, ableton),
+		tools.NewAbletonSoloTrack(g, ableton),
+		tools.NewAbletonArmTrack(g, ableton),
+		tools.NewAbletonSetTrackVolume(g, ableton),
+		tools.NewAbletonSetMonitoring(g, ableton),
+
+		// Clips
 		tools.NewAbletonCreateClip(g, ableton),
 		tools.NewAbletonGetClipNotes(g, ableton),
 		tools.NewAbletonFireClipSlot(g, ableton),
+		tools.NewAbletonStopClip(g, ableton),
 		tools.NewAbletonClearClipNotes(g, ableton),
 		tools.NewAbletonAddMidiNotes(g, ableton),
+		tools.NewAbletonDuplicateClipTo(g, ableton),
+		tools.NewAbletonSetClipName(g, ableton),
+
+		// Scenes
+		tools.NewAbletonFireScene(g, ableton),
+		tools.NewAbletonSetSceneName(g, ableton),
+		tools.NewAbletonCreateScene(g, ableton),
+		tools.NewAbletonDuplicateScene(g, ableton),
+
+		// Devices
+		tools.NewAbletonGetDeviceParameters(g, ableton),
+		tools.NewAbletonSetDeviceParameter(g, ableton),
+
+		// Raw OSC
 		tools.NewAbletonOscSend(g, ableton),
 	}
 
