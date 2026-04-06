@@ -3,7 +3,7 @@ module github.com/nozomi-koborinai/ableton-osc-mcp
 go 1.25.8
 
 require (
-	github.com/firebase/genkit/go v1.5.0
+	github.com/firebase/genkit/go v1.6.0
 	github.com/hypebeast/go-osc v0.0.0-20220308234300-cec5a8a1e5f5
 )
 
