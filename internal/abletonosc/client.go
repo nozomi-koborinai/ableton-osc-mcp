@@ -70,7 +70,9 @@ func NewClient(remoteHost string, remotePort int, localPort int, timeout time.Du
 		pending:    make(map[string][]waitItem),
 	}
 
-	addr := fmt.Sprintf("0.0.0.0:%d", localPort)
+	// Bind IPv4 loopback explicitly. AbletonOSC replies to 127.0.0.1:<clientPort>;
+	// listening on 0.0.0.0 can end up IPv6-only on newer Go/macOS and miss replies.
+	addr := fmt.Sprintf("127.0.0.1:%d", localPort)
 	c.server = &osc.Server{
 		Addr: addr,
 		Dispatcher: anyDispatcher{
