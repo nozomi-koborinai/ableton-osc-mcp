@@ -13,15 +13,21 @@ This enables AI assistants (Claude, Cursor, etc.) to interact with Ableton Live 
 - Add, read, and clear MIDI notes
 - Get/set tempo
 - List devices on a track
+- Load Drum Racks / presets from Live's Browser (with the included AbletonOSC patch)
 - Fire clip slots
 - Send raw OSC messages for advanced control
 
-## Limitations (and why)
+## Browser loading (AbletonOSC patch)
 
-- **Loading devices from Live's Browser (e.g., Drum Rack)** is **not supported** by the standard AbletonOSC API.
-  This MCP only talks to Ableton Live via AbletonOSC, so it can only do what AbletonOSC exposes.
-- To automate device loading, **AbletonOSC's Remote Script must be extended** with a custom OSC endpoint
-  that calls Live's Browser `load_item()` API. This is outside the scope of the default AbletonOSC install.
+Stock [AbletonOSC](https://github.com/ideoforms/AbletonOSC) does not expose Live's Browser `load_item()` API.
+This repo ships a small Remote Script patch under [`remote-script/`](remote-script/) that adds:
+
+- `/live/browser/find`
+- `/live/track/load/browser_item`
+- `/live/device/load/preset`
+
+Install steps: see [remote-script/README.md](remote-script/README.md).
+After applying the patch, **restart Ableton Live** (a full restart is required the first time; `/live/api/reload` alone is not enough).
 
 ## How it Works
 
@@ -209,18 +215,26 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | Tool | Description |
 |------|-------------|
 | `ableton_test` | Test connection to AbletonOSC |
-| `ableton_show_message` | Display message in Live's status bar |
-| `ableton_get_version` | Get Ableton Live version |
-| `ableton_get_tempo` | Get current tempo (BPM) |
-| `ableton_set_tempo` | Set tempo (BPM) |
+| `ableton_get_tempo` / `ableton_set_tempo` | Get/set tempo (BPM) |
+| `ableton_play` / `ableton_stop` / `ableton_stop_all_clips` | Transport |
+| `ableton_set_song_key` | Set root note and scale |
+| `ableton_set_metronome` | Enable/disable metronome |
 | `ableton_get_track_names` | List track names |
 | `ableton_get_track_devices` | List devices on a track |
-| `ableton_create_midi_track` | Create a new MIDI track |
-| `ableton_create_clip` | Create a new clip in a slot |
-| `ableton_get_clip_notes` | Get MIDI notes from a clip |
-| `ableton_add_midi_notes` | Add MIDI notes to a clip |
-| `ableton_clear_clip_notes` | Clear all notes from a clip |
-| `ableton_fire_clip_slot` | Fire (trigger) a clip slot |
+| `ableton_create_midi_track` | Create a MIDI track |
+| `ableton_set_track_name` | Rename a track |
+| `ableton_mute_track` / `ableton_solo_track` | Mute/solo |
+| `ableton_set_track_volume` | Set track volume |
+| `ableton_create_clip` | Create a clip in a slot |
+| `ableton_get_clip_notes` / `ableton_add_midi_notes` / `ableton_clear_clip_notes` | MIDI notes |
+| `ableton_fire_clip_slot` / `ableton_stop_clip` | Fire/stop a clip |
+| `ableton_duplicate_clip_to` | Duplicate clip to another slot |
+| `ableton_set_clip_name` | Rename a clip |
+| `ableton_fire_scene` | Fire a scene |
+| `ableton_get_device_parameters` / `ableton_set_device_parameter` | Device parameters |
+| `ableton_find_browser_item` | Search Live Browser (requires patch) |
+| `ableton_load_browser_item` | Load Drum Rack / instrument onto a track |
+| `ableton_load_device_preset` | Hotswap a preset onto a device |
 | `ableton_osc_send` | Send raw OSC message |
 
 ## Example Usage
@@ -228,7 +242,8 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 Once configured, you can ask your AI assistant:
 
 - "Set the tempo to 140 BPM"
-- "Create a MIDI track and add a 4-bar clip"
+- "Create a MIDI track, load Street Kit, and add a 4-bar clip"
+- "Find drum kits named Street in the browser"
 - "Add a kick drum pattern on beats 1, 2, 3, 4"
 - "What's the current tempo?"
 

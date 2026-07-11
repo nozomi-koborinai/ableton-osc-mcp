@@ -161,24 +161,6 @@ func NewAbletonSoloTrack(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
 	)
 }
 
-func NewAbletonArmTrack(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
-	return genkit.DefineTool(g, "ableton_arm_track", "Ableton Live: arm or disarm a track for recording",
-		func(_ *ai.ToolContext, input TrackBoolInput) (SentOutput, error) {
-			if input.TrackIndex < 0 {
-				return SentOutput{}, errors.New("track_index must be >= 0")
-			}
-			val := int32(0)
-			if input.Value {
-				val = 1
-			}
-			if err := client.Send("/live/track/set/arm", int32(input.TrackIndex), val); err != nil {
-				return SentOutput{}, err
-			}
-			return SentOutput{Sent: true}, nil
-		},
-	)
-}
-
 func NewAbletonSetTrackVolume(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
 	return genkit.DefineTool(g, "ableton_set_track_volume", "Ableton Live: set track volume (0.0=silence, 0.85=0dB, 1.0=+6dB)",
 		func(_ *ai.ToolContext, input SetTrackVolumeInput) (SentOutput, error) {
