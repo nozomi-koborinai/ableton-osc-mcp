@@ -370,7 +370,7 @@ func pickResamplingRouting(client *abletonosc.Client, trackIndex int) (string, e
 			return t, nil
 		}
 	}
-	return "", fmt.Errorf("Resampling input not available on track %d; available=%v", trackIndex, types)
+	return "", fmt.Errorf("resampling input not available on track %d; available=%v", trackIndex, types)
 }
 
 func asBoolish(v interface{}) (bool, error) {
