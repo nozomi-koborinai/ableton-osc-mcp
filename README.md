@@ -222,8 +222,12 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `ableton_get_track_names` | List track names |
 | `ableton_get_track_devices` | List devices on a track |
 | `ableton_create_midi_track` | Create a MIDI track |
+| `ableton_create_audio_track` | Create an audio track |
 | `ableton_set_track_name` | Rename a track |
 | `ableton_mute_track` / `ableton_solo_track` | Mute/solo |
+| `ableton_arm_track` | Arm/disarm for recording |
+| `ableton_get_track_input_routing` / `ableton_set_track_input_routing` | Input routing (e.g. Resampling) |
+| `ableton_set_monitoring` | Monitoring state (0=In 1=Auto 2=Off) |
 | `ableton_set_track_volume` | Set track volume |
 | `ableton_create_clip` | Create a clip in a slot |
 | `ableton_get_clip_notes` / `ableton_add_midi_notes` / `ableton_clear_clip_notes` | MIDI notes |
@@ -235,6 +239,12 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `ableton_find_browser_item` | Search Live Browser (requires patch) |
 | `ableton_load_browser_item` | Load Drum Rack / instrument onto a track |
 | `ableton_load_device_preset` | Hotswap a preset onto a device |
+| `ableton_get_track_meter` | Track output meter levels |
+| `ableton_get_master_meter` / `ableton_get_master_volume` / `ableton_set_master_volume` | Master meter/volume (requires master patch) |
+| `ableton_get_master_devices` / `ableton_get_master_device_parameters` / `ableton_set_master_device_parameter` | Master devices (requires master patch) |
+| `ableton_load_on_master` | Load Browser item onto master (requires browser+master patch) |
+| `ableton_get_session_record` / `ableton_set_session_record` | Session Record on/off |
+| `ableton_bounce_session_pass` | Record a scene pass onto a Bounce track via Resampling (tens of seconds; does not export WAV) |
 | `ableton_osc_send` | Send raw OSC message |
 
 ## Example Usage

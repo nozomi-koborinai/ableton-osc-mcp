@@ -133,7 +133,8 @@ class BrowserHandler(AbletonOSCHandler):
 
         def browser_load_at_path_handler(params: Tuple[Any]):
             """Load browser item by path.
-            Params: track_index, hotswap_device_index (-1 to append), root_name, *path_parts, item_name
+            Params: track_index (-1 = master), hotswap_device_index (-1 to append),
+                    root_name, *path_parts, item_name
             """
             track_index = int(params[0])
             device_index = int(params[1])
@@ -141,7 +142,10 @@ class BrowserHandler(AbletonOSCHandler):
                 return ("error", "missing_path")
             root_name = str(params[2])
             *path_parts, item_name = [str(p) for p in params[3:]]
-            track = self.song.tracks[track_index]
+            if track_index == -1:
+                track = self.song.master_track
+            else:
+                track = self.song.tracks[track_index]
             browser = Live.Application.get_application().browser
             node = _resolve_path(browser, root_name, path_parts)
             if node is None:
@@ -222,3 +226,81 @@ class BrowserHandler(AbletonOSCHandler):
         self.osc_server.add_handler("/live/browser/load_at_path", browser_load_at_path_handler)
         self.osc_server.add_handler("/live/track/load/browser_item", track_load_browser_item_handler)
         self.osc_server.add_handler("/live/device/load/preset", device_load_preset_handler)
+
+        # Master-track helpers (also registered by MasterHandler; kept here so hot-reload
+        # of browser.py always restores them even if master.py fails to import).
+        def _master():
+            return self.song.master_track
+
+        def master_get_volume(_params):
+            return (_master().mixer_device.volume.value,)
+
+        def master_set_volume(params):
+            _master().mixer_device.volume.value = float(params[0])
+
+        def master_get_meter_level(_params):
+            return (_master().output_meter_level,)
+
+        def master_get_meter_left(_params):
+            return (_master().output_meter_left,)
+
+        def master_get_meter_right(_params):
+            return (_master().output_meter_right,)
+
+        def master_get_num_devices(_params):
+            return (len(_master().devices),)
+
+        def master_get_devices_name(_params):
+            return tuple(d.name for d in _master().devices)
+
+        def master_get_devices_class_name(_params):
+            return tuple(d.class_name for d in _master().devices)
+
+        def master_get_devices_type(_params):
+            return tuple(int(d.type) for d in _master().devices)
+
+        def master_get_device_parameters_name(params):
+            device_index = int(params[0])
+            device = _master().devices[device_index]
+            names = [p.name for p in device.parameters]
+            return tuple([device_index] + names)
+
+        def master_get_device_parameters_value(params):
+            device_index = int(params[0])
+            device = _master().devices[device_index]
+            values = [p.value for p in device.parameters]
+            return tuple([device_index] + values)
+
+        def master_get_device_parameters_min(params):
+            device_index = int(params[0])
+            device = _master().devices[device_index]
+            values = [p.min for p in device.parameters]
+            return tuple([device_index] + values)
+
+        def master_get_device_parameters_max(params):
+            device_index = int(params[0])
+            device = _master().devices[device_index]
+            values = [p.max for p in device.parameters]
+            return tuple([device_index] + values)
+
+        def master_set_device_parameter(params):
+            device_index = int(params[0])
+            parameter_index = int(params[1])
+            value = float(params[2])
+            _master().devices[device_index].parameters[parameter_index].value = value
+            return (device_index, parameter_index, value)
+
+        self.osc_server.add_handler("/live/master/get/volume", master_get_volume)
+        self.osc_server.add_handler("/live/master/set/volume", master_set_volume)
+        self.osc_server.add_handler("/live/master/get/output_meter_level", master_get_meter_level)
+        self.osc_server.add_handler("/live/master/get/output_meter_left", master_get_meter_left)
+        self.osc_server.add_handler("/live/master/get/output_meter_right", master_get_meter_right)
+        self.osc_server.add_handler("/live/master/get/num_devices", master_get_num_devices)
+        self.osc_server.add_handler("/live/master/get/devices/name", master_get_devices_name)
+        self.osc_server.add_handler("/live/master/get/devices/class_name", master_get_devices_class_name)
+        self.osc_server.add_handler("/live/master/get/devices/type", master_get_devices_type)
+        self.osc_server.add_handler("/live/master/device/get/parameters/name", master_get_device_parameters_name)
+        self.osc_server.add_handler("/live/master/device/get/parameters/value", master_get_device_parameters_value)
+        self.osc_server.add_handler("/live/master/device/get/parameters/min", master_get_device_parameters_min)
+        self.osc_server.add_handler("/live/master/device/get/parameters/max", master_get_device_parameters_max)
+        self.osc_server.add_handler("/live/master/device/set/parameter/value", master_set_device_parameter)

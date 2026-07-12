@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"strings"
 	"sync"
 	"time"
@@ -11,43 +12,24 @@ import (
 	"github.com/hypebeast/go-osc/osc"
 )
 
-type anyDispatcher struct {
-	onMessage func(msg *osc.Message)
-}
-
-func (d anyDispatcher) Dispatch(packet osc.Packet) {
-	switch p := packet.(type) {
-	case *osc.Message:
-		d.onMessage(p)
-	case *osc.Bundle:
-		for _, msg := range p.Messages {
-			d.onMessage(msg)
-		}
-		for _, b := range p.Bundles {
-			d.Dispatch(b)
-		}
-	default:
-		// ignore
-	}
-}
-
 type waitItem struct {
 	ch    chan []interface{}
 	timer *time.Timer
 }
 
 type Client struct {
-	remoteHost string
-	remotePort int
+	remoteAddr *net.UDPAddr
 	timeout    time.Duration
 
-	client *osc.Client
-	server *osc.Server
+	conn net.PacketConn
 
 	mu      sync.Mutex
 	pending map[string][]waitItem
 }
 
+// NewClient binds one UDP socket for both send and receive.
+// AbletonOSC always replies to localPort (default 11001); using a single
+// socket avoids missed replies when send uses a separate ephemeral port.
 func NewClient(remoteHost string, remotePort int, localPort int, timeout time.Duration) (*Client, error) {
 	if remoteHost == "" {
 		return nil, errors.New("remoteHost is empty")
@@ -62,38 +44,67 @@ func NewClient(remoteHost string, remotePort int, localPort int, timeout time.Du
 		timeout = 500 * time.Millisecond
 	}
 
+	remoteAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", remoteHost, remotePort))
+	if err != nil {
+		return nil, fmt.Errorf("resolve remote: %w", err)
+	}
+
+	// Bind IPv4 loopback explicitly. Listening on 0.0.0.0 can end up IPv6-only
+	// on newer Go/macOS and miss AbletonOSC replies to 127.0.0.1.
+	localAddr := fmt.Sprintf("127.0.0.1:%d", localPort)
+	conn, err := net.ListenPacket("udp", localAddr)
+	if err != nil {
+		return nil, fmt.Errorf("listen %s: %w", localAddr, err)
+	}
+
 	c := &Client{
-		remoteHost: remoteHost,
-		remotePort: remotePort,
+		remoteAddr: remoteAddr,
 		timeout:    timeout,
-		client:     osc.NewClient(remoteHost, remotePort),
+		conn:       conn,
 		pending:    make(map[string][]waitItem),
 	}
 
-	// Bind IPv4 loopback explicitly. AbletonOSC replies to 127.0.0.1:<clientPort>;
-	// listening on 0.0.0.0 can end up IPv6-only on newer Go/macOS and miss replies.
-	addr := fmt.Sprintf("127.0.0.1:%d", localPort)
-	c.server = &osc.Server{
-		Addr: addr,
-		Dispatcher: anyDispatcher{
-			onMessage: c.handleMessage,
-		},
-	}
-
-	go func() {
-		// ListenAndServe will return on CloseConnection(); that's fine.
-		if err := c.server.ListenAndServe(); err != nil {
-			// Avoid stdout: MCP uses stdout. log writes to stderr.
-			log.Printf("AbletonOSC listen ended: %v", err)
-		}
-	}()
-
+	go c.readLoop()
 	return c, nil
 }
 
+func (c *Client) readLoop() {
+	buf := make([]byte, 65535)
+	for {
+		n, _, err := c.conn.ReadFrom(buf)
+		if err != nil {
+			if errors.Is(err, net.ErrClosed) {
+				return
+			}
+			log.Printf("AbletonOSC read error: %v", err)
+			continue
+		}
+		packet, err := osc.ParsePacket(string(buf[:n]))
+		if err != nil {
+			log.Printf("AbletonOSC parse error: %v", err)
+			continue
+		}
+		c.dispatchPacket(packet)
+	}
+}
+
+func (c *Client) dispatchPacket(packet osc.Packet) {
+	switch p := packet.(type) {
+	case *osc.Message:
+		c.handleMessage(p)
+	case *osc.Bundle:
+		for _, msg := range p.Messages {
+			c.handleMessage(msg)
+		}
+		for _, b := range p.Bundles {
+			c.dispatchPacket(b)
+		}
+	}
+}
+
 func (c *Client) Close() error {
-	if c.server != nil {
-		return c.server.CloseConnection()
+	if c.conn != nil {
+		return c.conn.Close()
 	}
 	return nil
 }
@@ -104,7 +115,12 @@ func (c *Client) Send(address string, args ...interface{}) error {
 	}
 	msg := osc.NewMessage(address)
 	msg.Append(args...)
-	return c.client.Send(msg)
+	data, err := msg.MarshalBinary()
+	if err != nil {
+		return err
+	}
+	_, err = c.conn.WriteTo(data, c.remoteAddr)
+	return err
 }
 
 func (c *Client) Query(address string, args ...interface{}) ([]interface{}, error) {
@@ -151,7 +167,6 @@ func (c *Client) QueryWithTimeout(timeout time.Duration, address string, args ..
 }
 
 func dropFirstWaiter(queue []waitItem, ch chan []interface{}) []waitItem {
-	// dropFirstWaiter removes the first matching waiter in FIFO order.
 	for i, w := range queue {
 		if w.ch == ch {
 			queue[i].timer.Stop()

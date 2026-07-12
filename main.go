@@ -56,10 +56,15 @@ func main() {
 		tools.NewAbletonGetTrackNames(g, ableton),
 		tools.NewAbletonGetTrackDevices(g, ableton),
 		tools.NewAbletonCreateMidiTrack(g, ableton),
+		tools.NewAbletonCreateAudioTrack(g, ableton),
 		tools.NewAbletonSetTrackName(g, ableton),
 		tools.NewAbletonMuteTrack(g, ableton),
 		tools.NewAbletonSoloTrack(g, ableton),
 		tools.NewAbletonSetTrackVolume(g, ableton),
+		tools.NewAbletonArmTrack(g, ableton),
+		tools.NewAbletonGetTrackInputRouting(g, ableton),
+		tools.NewAbletonSetTrackInputRouting(g, ableton),
+		tools.NewAbletonSetMonitoring(g, ableton),
 
 		// Clips
 		tools.NewAbletonCreateClip(g, ableton),
@@ -80,6 +85,21 @@ func main() {
 		tools.NewAbletonFindBrowserItem(g, ableton),
 		tools.NewAbletonLoadBrowserItem(g, ableton),
 		tools.NewAbletonLoadDevicePreset(g, ableton),
+
+		// Mix bus / Master
+		tools.NewAbletonGetTrackMeter(g, ableton),
+		tools.NewAbletonGetMasterMeter(g, ableton),
+		tools.NewAbletonGetMasterVolume(g, ableton),
+		tools.NewAbletonSetMasterVolume(g, ableton),
+		tools.NewAbletonGetMasterDevices(g, ableton),
+		tools.NewAbletonGetMasterDeviceParameters(g, ableton),
+		tools.NewAbletonSetMasterDeviceParameter(g, ableton),
+		tools.NewAbletonLoadOnMaster(g, ableton),
+
+		// Bounce / Session Record
+		tools.NewAbletonGetSessionRecord(g, ableton),
+		tools.NewAbletonSetSessionRecord(g, ableton),
+		tools.NewAbletonBounceSessionPass(g, ableton),
 
 		// Raw OSC
 		tools.NewAbletonOscSend(g, ableton),

@@ -18,12 +18,42 @@ def patch(manager_path: Path) -> None:
             1,
         )
 
+    if "abletonosc.MasterHandler(self)" not in text:
+        # Prefer registering after BrowserHandler when present.
+        if "abletonosc.BrowserHandler(self)," in text:
+            text = text.replace(
+                "abletonosc.BrowserHandler(self),",
+                "abletonosc.BrowserHandler(self),\n                abletonosc.MasterHandler(self),",
+                1,
+            )
+        else:
+            text = text.replace(
+                "abletonosc.DeviceHandler(self),",
+                "abletonosc.DeviceHandler(self),\n                abletonosc.MasterHandler(self),",
+                1,
+            )
+
     if "importlib.reload(abletonosc.browser)" not in text:
         text = text.replace(
             "importlib.reload(abletonosc.device)",
             "importlib.reload(abletonosc.device)\n            importlib.reload(abletonosc.browser)",
             1,
         )
+
+    if "importlib.reload(abletonosc.master)" not in text:
+        anchor = "importlib.reload(abletonosc.browser)"
+        if anchor in text:
+            text = text.replace(
+                anchor,
+                anchor + "\n            importlib.reload(abletonosc.master)",
+                1,
+            )
+        else:
+            text = text.replace(
+                "importlib.reload(abletonosc.device)",
+                "importlib.reload(abletonosc.device)\n            importlib.reload(abletonosc.master)",
+                1,
+            )
 
     if text == original:
         print("manager.py already patched (or pattern not found)")
@@ -35,12 +65,20 @@ def patch(manager_path: Path) -> None:
 
 def ensure_init_import(init_path: Path) -> None:
     text = init_path.read_text(encoding="utf-8")
-    if "from .browser import BrowserHandler" in text:
-        print("__init__.py already imports BrowserHandler")
+    changed = False
+    if "from .browser import BrowserHandler" not in text:
+        if not text.endswith("\n"):
+            text += "\n"
+        text += "from .browser import BrowserHandler\n"
+        changed = True
+    if "from .master import MasterHandler" not in text:
+        if not text.endswith("\n"):
+            text += "\n"
+        text += "from .master import MasterHandler\n"
+        changed = True
+    if not changed:
+        print("__init__.py already imports BrowserHandler/MasterHandler")
         return
-    if not text.endswith("\n"):
-        text += "\n"
-    text += "from .browser import BrowserHandler\n"
     init_path.write_text(text, encoding="utf-8")
     print(f"Updated {init_path}")
 
