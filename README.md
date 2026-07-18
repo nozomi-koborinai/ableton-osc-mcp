@@ -283,6 +283,11 @@ service, and you are responsible for your right to use any source you analyze.
 Use results with files you have rights to use, then load into Live and call
 `ableton_match_clip_tempo` if needed.
 
+To turn a reference into a starting point, pass a `chord_summary` (or your own
+progression like `C | G | Am | F`) to `ableton_build_chord_clip`, which writes a
+block-chord MIDI clip into a MIDI track you can build on. It is a sketch, not a
+finished arrangement.
+
 ## Available Tools
 
 | Tool | Description |
@@ -340,6 +345,7 @@ Use results with files you have rights to use, then load into Live and call
 | `ableton_get_session_record` / `ableton_set_session_record` | Session Record on/off |
 | `ableton_bounce_session_pass` | Record a scene pass onto a Bounce track via Resampling (tens of seconds; does not export WAV) |
 | `ableton_setup_drum_track` | Create MIDI drum track, load kit, fill clip with preset pattern (requires browser patch) |
+| `ableton_build_chord_clip` | Write a MIDI chord-progression clip from a chord string (e.g. an analysis `chord_summary`); optional tempo + fire |
 | `ableton_osc_send` | Send raw OSC message |
 
 ## Example Usage
