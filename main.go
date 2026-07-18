@@ -84,6 +84,7 @@ func main() {
 		tools.NewAbletonDuplicateClipTo(g, ableton),
 		tools.NewAbletonSetClipName(g, ableton),
 		tools.NewAbletonCreateDrumVariation(g, ableton),
+		tools.NewAbletonCreateBassVariation(g, ableton),
 
 		// Scenes
 		tools.NewAbletonFireScene(g, ableton),
