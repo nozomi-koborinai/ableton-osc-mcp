@@ -21,6 +21,7 @@ This enables AI assistants (Claude, Cursor, etc.) to interact with Ableton Live 
 - Create safe A/B drum variations that change only groove, density, or fills
 - Create safe A/B bass variations that change only octave, note length, or groove
 - Save A/B choices locally to build a taste profile and guide the next comparison
+- Compare small mix-balance hypotheses, then restore the original volume snapshot
 - Autogain tracks toward a target meter level while audio is playing
 - Diagnose AbletonOSC connection and browser/master patch readiness
 - Fire clip slots
@@ -261,6 +262,8 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `ableton_load_device_preset` | Hotswap a preset onto a device |
 | `ableton_get_track_meter` | Track output meter levels |
 | `ableton_autogain_tracks` | Iteratively adjust track volumes toward a target meter level |
+| `ableton_capture_mix_snapshot` / `ableton_restore_mix_snapshot` | Capture and restore track volumes for safe A/B mix comparison |
+| `ableton_apply_mix_variation` | Apply small B-version volume changes and return the A snapshot |
 | `ableton_get_master_meter` / `ableton_get_master_volume` / `ableton_set_master_volume` | Master meter/volume (requires master patch) |
 | `ableton_get_master_devices` / `ableton_get_master_device_parameters` / `ableton_set_master_device_parameter` | Master devices (requires master patch) |
 | `ableton_load_on_master` | Load Browser item onto master (requires browser+master patch) |
@@ -280,6 +283,7 @@ Once configured, you can ask your AI assistant:
 - "Create a groove variation of clip 0 in empty slot 1 so I can compare them"
 - "Create an octave-up variation of the bass clip in empty slot 1"
 - "I prefer the drum groove variation; save that choice and suggest what to compare next"
+- "Create a mix B version with the bass 0.05 lower; keep the returned snapshot so I can compare and restore A"
 - "Autogain the drum and bass tracks while the beat is playing"
 - "Find drum kits named Street in the browser"
 - "List the Drums browser folder, then load Street Kit onto track 0"
