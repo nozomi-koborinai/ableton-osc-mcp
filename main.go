@@ -80,6 +80,7 @@ func main() {
 		tools.NewAbletonStopClip(g, ableton),
 		tools.NewAbletonClearClipNotes(g, ableton),
 		tools.NewAbletonAddMidiNotes(g, ableton),
+		tools.NewAbletonHumanizeClip(g, ableton),
 		tools.NewAbletonDuplicateClipTo(g, ableton),
 		tools.NewAbletonSetClipName(g, ableton),
 

@@ -17,6 +17,7 @@ This enables AI assistants (Claude, Cursor, etc.) to interact with Ableton Live 
 - Load Drum Racks / presets from Live's Browser (with the included AbletonOSC patch)
 - Browse Live Browser folders by path and load items onto tracks
 - Set up a drum track with kit + clip + pattern in one recipe
+- Humanize MIDI clips with microtiming, velocity variation, and swing
 - Diagnose AbletonOSC connection and browser/master patch readiness
 - Fire clip slots
 - Send raw OSC messages for advanced control
@@ -239,6 +240,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `ableton_set_track_volume` | Set track volume |
 | `ableton_create_clip` | Create a clip in a slot |
 | `ableton_get_clip_notes` / `ableton_add_midi_notes` / `ableton_clear_clip_notes` | MIDI notes |
+| `ableton_humanize_clip` | Add microtiming, velocity variation, and optional swing to clip notes |
 | `ableton_fire_clip_slot` / `ableton_stop_clip` | Fire/stop a clip |
 | `ableton_duplicate_clip_to` | Duplicate clip to another slot |
 | `ableton_set_clip_name` | Rename a clip |
@@ -265,6 +267,7 @@ Once configured, you can ask your AI assistant:
 - "Set the tempo to 140 BPM"
 - "Create a MIDI track, load Street Kit, and add a 4-bar clip"
 - "Set up a Street Kit drum track with a four-on-floor pattern"
+- "Humanize the drum clip with a bit of swing"
 - "Find drum kits named Street in the browser"
 - "List the Drums browser folder, then load Street Kit onto track 0"
 - "Add a kick drum pattern on beats 1, 2, 3, 4"
