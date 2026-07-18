@@ -23,6 +23,7 @@ This enables AI assistants (Claude, Cursor, etc.) to interact with Ableton Live 
 - Save A/B choices locally to build a taste profile and guide the next comparison
 - Compare small mix-balance hypotheses, then restore the original volume snapshot
 - Duplicate a scene and compare an energy lift or pullback on selected MIDI tracks
+- Audition A/B clips or scenes automatically in alternating bar-length sections
 - Autogain tracks toward a target meter level while audio is playing
 - Diagnose AbletonOSC connection and browser/master patch readiness
 - Fire clip slots
@@ -249,6 +250,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `ableton_humanize_clip` | Add microtiming, velocity variation, and optional swing to clip notes |
 | `ableton_create_drum_variation` | Duplicate a drum clip into an empty slot and change groove, density, or fill for A/B comparison |
 | `ableton_create_bass_variation` | Duplicate a bass clip into an empty slot and change octave, note length, or groove for A/B comparison |
+| `ableton_audition_ab` | Alternate A/B clips or scenes for a specified number of bars and cycles |
 | `ableton_record_variation_preference` | Save whether the source or variation matched your taste |
 | `ableton_get_taste_profile` | Summarize saved A/B choices and suggest the next comparison |
 | `ableton_fire_clip_slot` / `ableton_stop_clip` | Fire/stop a clip |
@@ -285,6 +287,7 @@ Once configured, you can ask your AI assistant:
 - "Create a groove variation of clip 0 in empty slot 1 so I can compare them"
 - "Create an octave-up variation of the bass clip in empty slot 1"
 - "I prefer the drum groove variation; save that choice and suggest what to compare next"
+- "Audition drum clips 0 and 1 on track 0 for two bars each, twice"
 - "Create a mix B version with the bass 0.05 lower; keep the returned snapshot so I can compare and restore A"
 - "Create an energy lift of scene 0 for the drum and bass MIDI tracks so I can compare the sections"
 - "Autogain the drum and bass tracks while the beat is playing"

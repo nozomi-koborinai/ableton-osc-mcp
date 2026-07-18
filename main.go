@@ -90,6 +90,7 @@ func main() {
 		tools.NewAbletonSetClipName(g, ableton),
 		tools.NewAbletonCreateDrumVariation(g, ableton),
 		tools.NewAbletonCreateBassVariation(g, ableton),
+		tools.NewAbletonAuditionAB(g, ableton),
 
 		// Scenes
 		tools.NewAbletonFireScene(g, ableton),
