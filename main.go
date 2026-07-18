@@ -93,6 +93,7 @@ func main() {
 
 		// Scenes
 		tools.NewAbletonFireScene(g, ableton),
+		tools.NewAbletonCreateSceneEnergyVariation(g, ableton),
 
 		// Devices / Browser
 		tools.NewAbletonGetDeviceParameters(g, ableton),

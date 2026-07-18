@@ -22,6 +22,7 @@ This enables AI assistants (Claude, Cursor, etc.) to interact with Ableton Live 
 - Create safe A/B bass variations that change only octave, note length, or groove
 - Save A/B choices locally to build a taste profile and guide the next comparison
 - Compare small mix-balance hypotheses, then restore the original volume snapshot
+- Duplicate a scene and compare an energy lift or pullback on selected MIDI tracks
 - Autogain tracks toward a target meter level while audio is playing
 - Diagnose AbletonOSC connection and browser/master patch readiness
 - Fire clip slots
@@ -254,6 +255,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `ableton_duplicate_clip_to` | Duplicate clip to another slot |
 | `ableton_set_clip_name` | Rename a clip |
 | `ableton_fire_scene` | Fire a scene |
+| `ableton_create_scene_energy_variation` | Duplicate a scene, then make a MIDI velocity lift or pullback for A/B comparison |
 | `ableton_get_device_parameters` / `ableton_set_device_parameter` | Device parameters |
 | `ableton_find_browser_item` | Search Live Browser (requires patch) |
 | `ableton_list_browser_folder` | List Browser roots or folder children (requires patch) |
@@ -284,6 +286,7 @@ Once configured, you can ask your AI assistant:
 - "Create an octave-up variation of the bass clip in empty slot 1"
 - "I prefer the drum groove variation; save that choice and suggest what to compare next"
 - "Create a mix B version with the bass 0.05 lower; keep the returned snapshot so I can compare and restore A"
+- "Create an energy lift of scene 0 for the drum and bass MIDI tracks so I can compare the sections"
 - "Autogain the drum and bass tracks while the beat is playing"
 - "Find drum kits named Street in the browser"
 - "List the Drums browser folder, then load Street Kit onto track 0"
