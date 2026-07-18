@@ -13,6 +13,7 @@ import (
 
 const (
 	maxFileBytes      = 80 << 20 // 80 MiB
+	maxChunkBytes     = 1 << 20  // cap non-data chunk allocation (guards bogus sizes)
 	minBPM            = 70.0
 	maxBPM            = 180.0
 	envelopeHop       = 512
@@ -35,6 +36,8 @@ type Result struct {
 	Note              string  `json:"note"`
 }
 
+// AnalyzeFile analyzes a local WAV file already present on disk. It never
+// downloads or writes audio; callers must supply audio they have rights to use.
 func AnalyzeFile(path string, projectTempo float64) (Result, error) {
 	abs, err := validateLocalAudioPath(path)
 	if err != nil {
@@ -55,7 +58,25 @@ func AnalyzeFile(path string, projectTempo float64) (Result, error) {
 		return Result{}, fmt.Errorf("audio file too large (%d bytes); max is %d", info.Size(), maxFileBytes)
 	}
 
-	mono, sampleRate, channels, err := loadMonoWAV(abs)
+	f, err := os.Open(abs)
+	if err != nil {
+		return Result{}, fmt.Errorf("open audio file: %w", err)
+	}
+	defer func() { _ = f.Close() }()
+
+	out, err := analyzeWAVStream(f, projectTempo)
+	if err != nil {
+		return Result{}, err
+	}
+	out.Path = abs
+	out.Note = "Local-file analysis only. No download, transcription, or note extraction. Use results to place/warp a sample you already have rights to use."
+	return out, nil
+}
+
+// analyzeWAVStream decodes WAV audio from r and computes sampling-oriented
+// metadata. Path and Note are left for the caller to fill in per source.
+func analyzeWAVStream(r io.Reader, projectTempo float64) (Result, error) {
+	mono, sampleRate, channels, err := loadMonoWAV(io.LimitReader(r, maxFileBytes+1))
 	if err != nil {
 		return Result{}, err
 	}
@@ -77,7 +98,6 @@ func AnalyzeFile(path string, projectTempo float64) (Result, error) {
 	}
 
 	out := Result{
-		Path:              abs,
 		Format:            "wav",
 		DurationSec:       duration,
 		SampleRate:        sampleRate,
@@ -88,7 +108,6 @@ func AnalyzeFile(path string, projectTempo float64) (Result, error) {
 		BPMConfidence:     confidence,
 		OnsetCount:        onsets,
 		SuggestedWarpMode: warpMode,
-		Note:              "Local-file analysis only. No download, transcription, or note extraction. Use results to place/warp a sample you already have rights to use.",
 	}
 	if projectTempo > 0 && duration > 0 {
 		beats := duration * (projectTempo / 60)
@@ -116,13 +135,7 @@ func validateLocalAudioPath(path string) (string, error) {
 	return filepath.Clean(path), nil
 }
 
-func loadMonoWAV(path string) ([]float64, int, int, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, 0, 0, err
-	}
-	defer func() { _ = f.Close() }()
-
+func loadMonoWAV(f io.Reader) ([]float64, int, int, error) {
 	var header [12]byte
 	if _, err := io.ReadFull(f, header[:]); err != nil {
 		return nil, 0, 0, fmt.Errorf("read wav header: %w", err)
@@ -149,6 +162,22 @@ func loadMonoWAV(path string) ([]float64, int, int, error) {
 		}
 		chunkID := string(chunkHeader[0:4])
 		chunkSize := binary.LittleEndian.Uint32(chunkHeader[4:8])
+
+		// Streaming encoders (e.g. ffmpeg writing to a pipe) cannot seek back to
+		// patch the data chunk size, so it holds a placeholder. Read the data
+		// chunk to EOF instead of trusting the declared size.
+		if chunkID == "data" {
+			payload, err := io.ReadAll(f)
+			if err != nil {
+				return nil, 0, 0, fmt.Errorf("read data chunk: %w", err)
+			}
+			data = payload
+			break
+		}
+
+		if chunkSize > maxChunkBytes {
+			return nil, 0, 0, fmt.Errorf("%s chunk too large (%d bytes)", chunkID, chunkSize)
+		}
 		payload := make([]byte, chunkSize)
 		if _, err := io.ReadFull(f, payload); err != nil {
 			return nil, 0, 0, fmt.Errorf("read %s chunk: %w", chunkID, err)
@@ -158,8 +187,7 @@ func loadMonoWAV(path string) ([]float64, int, int, error) {
 			var pad [1]byte
 			_, _ = f.Read(pad[:])
 		}
-		switch chunkID {
-		case "fmt ":
+		if chunkID == "fmt " {
 			if len(payload) < 16 {
 				return nil, 0, 0, errors.New("invalid fmt chunk")
 			}
@@ -167,8 +195,6 @@ func loadMonoWAV(path string) ([]float64, int, int, error) {
 			channels = binary.LittleEndian.Uint16(payload[2:4])
 			sampleRate = binary.LittleEndian.Uint32(payload[4:8])
 			bitsPerSample = binary.LittleEndian.Uint16(payload[14:16])
-		case "data":
-			data = payload
 		}
 	}
 	if len(data) == 0 || channels == 0 || sampleRate == 0 {
