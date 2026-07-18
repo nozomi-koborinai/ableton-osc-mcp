@@ -186,6 +186,97 @@ func TestCreateDrumVariationRejectsSameSlot(t *testing.T) {
 	}
 }
 
+func TestCreateDrumVariationRejectsNoopDensity(t *testing.T) {
+	t.Parallel()
+
+	strength := 0.0
+	client := &variationStub{
+		queries: map[string][]interface{}{
+			"/live/clip_slot/get/has_clip": {int32(0), int32(1), false},
+			"/live/clip/get/notes": {
+				int32(0), int32(0),
+				int32(36), float32(0), float32(0.25), int32(100), false,
+			},
+			"/live/clip/get/length": {int32(0), int32(0), float32(2)},
+		},
+		sendErr: map[string]error{},
+	}
+	_, err := createDrumVariation(client, CreateDrumVariationInput{
+		TrackIndex:      0,
+		SourceClipIndex: 0,
+		TargetClipIndex: 1,
+		Variation:       "density",
+		Strength:        &strength,
+	})
+	if err == nil {
+		t.Fatal("createDrumVariation() error = nil, want no-op density error")
+	}
+	if hasVariationSend(client.calls, "/live/clip_slot/duplicate_clip_to") {
+		t.Error("no-op density must not duplicate a B clip")
+	}
+}
+
+func TestCreateDrumVariationRejectsNoopFill(t *testing.T) {
+	t.Parallel()
+
+	// Clip shorter than 1 beat: fillNotes returns nothing.
+	client := &variationStub{
+		queries: map[string][]interface{}{
+			"/live/clip_slot/get/has_clip": {int32(0), int32(1), false},
+			"/live/clip/get/notes": {
+				int32(0), int32(0),
+				int32(36), float32(0), float32(0.25), int32(100), false,
+			},
+			"/live/clip/get/length": {int32(0), int32(0), float32(0.5)},
+		},
+		sendErr: map[string]error{},
+	}
+	_, err := createDrumVariation(client, CreateDrumVariationInput{
+		TrackIndex:      0,
+		SourceClipIndex: 0,
+		TargetClipIndex: 1,
+		Variation:       "fill",
+	})
+	if err == nil {
+		t.Fatal("createDrumVariation() error = nil, want no-op fill error")
+	}
+	if hasVariationSend(client.calls, "/live/clip_slot/duplicate_clip_to") {
+		t.Error("no-op fill must not duplicate a B clip")
+	}
+}
+
+func TestCreateDrumVariationRejectsNoopGroove(t *testing.T) {
+	t.Parallel()
+
+	strength := 0.0
+	seed := int64(7)
+	client := &variationStub{
+		queries: map[string][]interface{}{
+			"/live/clip_slot/get/has_clip": {int32(0), int32(1), false},
+			"/live/clip/get/notes": {
+				int32(0), int32(0),
+				int32(36), float32(0), float32(0.25), int32(100), false,
+			},
+			"/live/clip/get/length": {int32(0), int32(0), float32(4)},
+		},
+		sendErr: map[string]error{},
+	}
+	_, err := createDrumVariation(client, CreateDrumVariationInput{
+		TrackIndex:      0,
+		SourceClipIndex: 0,
+		TargetClipIndex: 1,
+		Variation:       "groove",
+		Strength:        &strength,
+		Seed:            &seed,
+	})
+	if err == nil {
+		t.Fatal("createDrumVariation() error = nil, want no-op groove error")
+	}
+	if hasVariationSend(client.calls, "/live/clip_slot/duplicate_clip_to") {
+		t.Error("no-op groove must not duplicate a B clip")
+	}
+}
+
 func newVariationRNG(seed int64) *rand.Rand {
 	return rand.New(rand.NewSource(seed))
 }

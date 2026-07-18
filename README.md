@@ -248,7 +248,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `ableton_create_clip` | Create a clip in a slot |
 | `ableton_get_clip_notes` / `ableton_add_midi_notes` / `ableton_clear_clip_notes` | MIDI notes |
 | `ableton_humanize_clip` | Add microtiming, velocity variation, and optional swing to clip notes |
-| `ableton_create_drum_variation` | Duplicate a drum clip into an empty slot and change groove, density, or fill for A/B comparison |
+| `ableton_create_drum_variation` | Duplicate a drum clip into an empty slot and change groove, density, or fill for A/B comparison (rejects no-op changes) |
 | `ableton_create_bass_variation` | Duplicate a bass clip into an empty slot and change octave, note length, or groove for A/B comparison |
 | `ableton_audition_ab` | Alternate A/B clips or scenes for N bars, waiting on Live song time with 1-bar launch quantization |
 | `ableton_record_variation_preference` | Save whether the source or variation matched your taste (drum, bass, scene, or mix) |

@@ -104,7 +104,7 @@ func createBassVariation(client variationClient, input CreateBassVariationInput)
 		rand.New(rand.NewSource(opts.Seed)),
 	)
 	if changed == 0 {
-		return CreateBassVariationOutput{}, errors.New("variation would not change any source notes")
+		return CreateBassVariationOutput{}, errors.New("variation would not change the source clip")
 	}
 
 	if err := client.Send(
