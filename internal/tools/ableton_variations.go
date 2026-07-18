@@ -110,15 +110,6 @@ func createDrumVariation(client variationClient, input CreateDrumVariationInput)
 		clipLength = inferredClipLength(sourceNotes)
 	}
 
-	if err := client.Send(
-		"/live/clip_slot/duplicate_clip_to",
-		int32(input.TrackIndex),
-		int32(input.SourceClipIndex),
-		int32(input.TargetClipIndex),
-	); err != nil {
-		return CreateDrumVariationOutput{}, fmt.Errorf("duplicate source clip: %w", err)
-	}
-
 	rng := rand.New(rand.NewSource(opts.Seed))
 	var notes []MidiNote
 	var notesChanged, notesAdded int
@@ -132,7 +123,7 @@ func createDrumVariation(client variationClient, input CreateDrumVariationInput)
 			Seed:           opts.Seed,
 		}
 		notes = humanizeNotes(sourceNotes, humanize, rng, clipLength)
-		notesChanged = len(notes)
+		notesChanged = countChangedMidiNotes(sourceNotes, notes)
 	case "density":
 		additions := densityNotes(sourceNotes, clipLength, opts.HatPitch, opts.Strength, rng)
 		notes = append(copyMidiNotes(sourceNotes), additions...)
@@ -142,12 +133,24 @@ func createDrumVariation(client variationClient, input CreateDrumVariationInput)
 		notes = append(copyMidiNotes(sourceNotes), additions...)
 		notesAdded = len(additions)
 	}
+	if notesChanged == 0 && notesAdded == 0 {
+		return CreateDrumVariationOutput{}, errors.New("variation would not change the source clip")
+	}
+
+	if err := client.Send(
+		"/live/clip_slot/duplicate_clip_to",
+		int32(input.TrackIndex),
+		int32(input.SourceClipIndex),
+		int32(input.TargetClipIndex),
+	); err != nil {
+		return CreateDrumVariationOutput{}, fmt.Errorf("duplicate source clip: %w", err)
+	}
 
 	if variation == "groove" {
 		if err := replaceVariationNotes(client, input.TrackIndex, input.TargetClipIndex, sourceNotes, notes); err != nil {
 			return CreateDrumVariationOutput{}, err
 		}
-	} else if notesAdded > 0 {
+	} else {
 		if err := client.Send("/live/clip/add/notes", addNotesArgs(input.TrackIndex, input.TargetClipIndex, notes[len(sourceNotes):])...); err != nil {
 			return CreateDrumVariationOutput{}, fmt.Errorf("add variation notes: %w", err)
 		}
@@ -315,4 +318,38 @@ func copyMidiNotes(notes []MidiNote) []MidiNote {
 		out = append(out, copied)
 	}
 	return out
+}
+
+func countChangedMidiNotes(original, varied []MidiNote) int {
+	if len(original) != len(varied) {
+		n := len(varied)
+		if len(original) > n {
+			n = len(original)
+		}
+		return n
+	}
+	changed := 0
+	for i := range original {
+		if !midiNotesEqual(original[i], varied[i]) {
+			changed++
+		}
+	}
+	return changed
+}
+
+func midiNotesEqual(a, b MidiNote) bool {
+	if a.Pitch != b.Pitch || a.Velocity != b.Velocity {
+		return false
+	}
+	if math.Abs(a.StartTime-b.StartTime) > 1e-6 || math.Abs(a.Duration-b.Duration) > 1e-6 {
+		return false
+	}
+	return midiMuteValue(a.Mute) == midiMuteValue(b.Mute)
+}
+
+func midiMuteValue(mute *bool) bool {
+	if mute == nil {
+		return false
+	}
+	return *mute
 }
