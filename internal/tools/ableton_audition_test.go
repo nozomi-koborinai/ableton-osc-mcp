@@ -3,6 +3,7 @@ package tools
 import (
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -259,7 +260,7 @@ func TestCeilBarBeat(t *testing.T) {
 func TestValidateAuditionInput(t *testing.T) {
 	t.Parallel()
 
-	_, _, _, _, err := validateAuditionInput(AuditionABInput{
+	_, _, _, _, _, _, err := validateAuditionInput(AuditionABInput{
 		TargetType:     "clip",
 		SourceIndex:    0,
 		VariationIndex: 1,
@@ -269,7 +270,7 @@ func TestValidateAuditionInput(t *testing.T) {
 	}
 
 	trackIndex := 0
-	_, _, _, _, err = validateAuditionInput(AuditionABInput{
+	_, _, _, _, _, _, err = validateAuditionInput(AuditionABInput{
 		TargetType:     "scene",
 		TrackIndex:     &trackIndex,
 		SourceIndex:    0,
@@ -279,7 +280,7 @@ func TestValidateAuditionInput(t *testing.T) {
 		t.Fatal("scene audition with track index should fail")
 	}
 
-	_, _, _, beats, err := validateAuditionInput(AuditionABInput{
+	_, _, _, beats, _, _, err := validateAuditionInput(AuditionABInput{
 		TargetType:     "scene",
 		SourceIndex:    0,
 		VariationIndex: 1,
@@ -289,5 +290,64 @@ func TestValidateAuditionInput(t *testing.T) {
 	}
 	if beats != 0 {
 		t.Errorf("beats override = %d, want 0 (query Live)", beats)
+	}
+
+	_, _, _, _, _, _, err = validateAuditionInput(AuditionABInput{
+		TargetType:     "scene",
+		SourceIndex:    0,
+		VariationIndex: 1,
+		Instrument:     "drum",
+	})
+	if err == nil {
+		t.Fatal("scene audition with drum instrument should fail")
+	}
+}
+
+func TestAuditionPreferencePrompt(t *testing.T) {
+	t.Parallel()
+
+	specific := auditionPreferencePrompt("clip", "drum", "groove")
+	if !strings.Contains(specific, "instrument=drum variation=groove") {
+		t.Errorf("specific prompt = %q", specific)
+	}
+	scene := auditionPreferencePrompt("scene", "", "")
+	if !strings.Contains(scene, "instrument=scene") || !strings.Contains(scene, "lift or pullback") {
+		t.Errorf("scene prompt = %q", scene)
+	}
+	clip := auditionPreferencePrompt("clip", "", "")
+	if !strings.Contains(clip, "drum or bass") {
+		t.Errorf("clip prompt = %q", clip)
+	}
+}
+
+func TestAuditionABIncludesTasteHint(t *testing.T) {
+	t.Parallel()
+
+	client := &auditionStub{
+		tempo:        120,
+		songTime:     0,
+		signature:    4,
+		isPlaying:    true,
+		quantization: 4,
+	}
+	bars := 1
+	got, err := auditionAB(client, AuditionABInput{
+		TargetType:     "scene",
+		SourceIndex:    0,
+		VariationIndex: 1,
+		BarsPerVersion: &bars,
+		Instrument:     "scene",
+		Variation:      "lift",
+	}, func(d time.Duration) {
+		advanceAuditionStub(client, d)
+	})
+	if err != nil {
+		t.Fatalf("auditionAB() error = %v", err)
+	}
+	if got.Instrument != "scene" || got.Variation != "lift" {
+		t.Errorf("taste hint = %#v", got)
+	}
+	if !strings.Contains(got.PreferencePrompt, "instrument=scene variation=lift") {
+		t.Errorf("preference_prompt = %q", got.PreferencePrompt)
 	}
 }

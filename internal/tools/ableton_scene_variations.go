@@ -30,6 +30,7 @@ type CreateSceneEnergyVariationOutput struct {
 	TracksSkipped    []int  `json:"tracks_skipped,omitempty"`
 	NotesChanged     int    `json:"notes_changed"`
 	Fired            bool   `json:"fired"`
+	PreferencePrompt string `json:"preference_prompt"`
 }
 
 type sceneVariationTrack struct {
@@ -173,6 +174,7 @@ func createSceneEnergyVariation(client variationClient, input CreateSceneEnergyV
 		TracksSkipped:    skipped,
 		NotesChanged:     changedNotes,
 		Fired:            fired,
+		PreferencePrompt: auditionPreferencePrompt("scene", "scene", variation),
 	}, nil
 }
 
