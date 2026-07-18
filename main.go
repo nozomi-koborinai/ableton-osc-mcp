@@ -113,6 +113,9 @@ func main() {
 		tools.NewAbletonSetMasterDeviceParameter(g, ableton),
 		tools.NewAbletonLoadOnMaster(g, ableton),
 		tools.NewAbletonAutogainTracks(g, ableton),
+		tools.NewAbletonCaptureMixSnapshot(g, ableton),
+		tools.NewAbletonApplyMixVariation(g, ableton),
+		tools.NewAbletonRestoreMixSnapshot(g, ableton),
 
 		// Bounce / Session Record
 		tools.NewAbletonGetSessionRecord(g, ableton),
