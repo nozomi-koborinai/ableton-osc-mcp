@@ -11,6 +11,7 @@ import (
 	"github.com/nozomi-koborinai/ableton-osc-mcp/internal/abletonosc"
 	"github.com/nozomi-koborinai/ableton-osc-mcp/internal/config"
 	mcpinternal "github.com/nozomi-koborinai/ableton-osc-mcp/internal/mcp"
+	"github.com/nozomi-koborinai/ableton-osc-mcp/internal/taste"
 	"github.com/nozomi-koborinai/ableton-osc-mcp/internal/tools"
 )
 
@@ -40,6 +41,10 @@ func main() {
 	defer func() {
 		_ = ableton.Close()
 	}()
+	tasteStore, err := taste.NewStore(cfg.TasteProfilePath)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	toolList := []ai.Tool{
 		// Song / Transport
@@ -116,6 +121,10 @@ func main() {
 
 		// Recipes
 		tools.NewAbletonSetupDrumTrack(g, ableton),
+
+		// A/B comparison feedback
+		tools.NewAbletonRecordVariationPreference(g, tasteStore),
+		tools.NewAbletonGetTasteProfile(g, tasteStore),
 
 		// Raw OSC
 		tools.NewAbletonOscSend(g, ableton),
