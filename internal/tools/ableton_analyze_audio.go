@@ -24,6 +24,9 @@ type AnalyzeLocalAudioOutput struct {
 	BPMConfidence     float64 `json:"bpm_confidence"`
 	OnsetCount        int     `json:"onset_count"`
 	SuggestedWarpMode string  `json:"suggested_warp_mode"`
+	Key               string  `json:"key,omitempty"`
+	Scale             string  `json:"scale,omitempty"`
+	KeyConfidence     float64 `json:"key_confidence,omitempty"`
 	LengthBarsAtBPM   float64 `json:"length_bars_at_project_tempo,omitempty"`
 	Note              string  `json:"note"`
 	NextStep          string  `json:"next_step"`
@@ -31,7 +34,7 @@ type AnalyzeLocalAudioOutput struct {
 
 func NewAbletonAnalyzeLocalAudio(g *genkit.Genkit) ai.Tool {
 	return genkit.DefineTool(g, "ableton_analyze_local_audio",
-		"Analyze a local .wav file for sampling placement (duration, levels, estimated BPM). Does not download URLs or extract melodies/notes.",
+		"Analyze a local .wav file for sampling placement (duration, levels, estimated BPM, approximate key/scale). Does not download URLs or extract melodies/notes.",
 		func(_ *ai.ToolContext, input AnalyzeLocalAudioInput) (AnalyzeLocalAudioOutput, error) {
 			return analyzeLocalAudio(input)
 		},
@@ -59,6 +62,9 @@ func analyzeLocalAudio(input AnalyzeLocalAudioInput) (AnalyzeLocalAudioOutput, e
 		BPMConfidence:     got.BPMConfidence,
 		OnsetCount:        got.OnsetCount,
 		SuggestedWarpMode: got.SuggestedWarpMode,
+		Key:               got.Key,
+		Scale:             got.Scale,
+		KeyConfidence:     got.KeyConfidence,
 		LengthBarsAtBPM:   got.LengthBarsAtBPM,
 		Note:              got.Note,
 		NextStep:          "If you load this sample into Live, use ableton_match_clip_tempo with the suggested_warp_mode so it follows the project tempo.",
