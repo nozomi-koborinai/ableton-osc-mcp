@@ -4,24 +4,45 @@ import (
 	"errors"
 	"math"
 	"math/rand"
+	"strings"
 	"testing"
 )
 
 type humanizeClientStub struct {
-	notesRes []interface{}
-	calls    []string
+	notesRes    []interface{}
+	lengthRes   []interface{}
+	calls       []string
+	sendErr     map[string]error
+	failAddOnce bool
+	addCalls    [][]interface{}
 }
 
 func (s *humanizeClientStub) Query(address string, _ ...interface{}) ([]interface{}, error) {
 	s.calls = append(s.calls, "Query:"+address)
-	if address != "/live/clip/get/notes" {
+	switch address {
+	case "/live/clip/get/notes":
+		return s.notesRes, nil
+	case "/live/clip/get/length":
+		if s.lengthRes == nil {
+			return nil, errors.New("no length")
+		}
+		return s.lengthRes, nil
+	default:
 		return nil, errors.New("unexpected query")
 	}
-	return s.notesRes, nil
 }
 
-func (s *humanizeClientStub) Send(address string, _ ...interface{}) error {
+func (s *humanizeClientStub) Send(address string, args ...interface{}) error {
 	s.calls = append(s.calls, "Send:"+address)
+	if address == "/live/clip/add/notes" {
+		s.addCalls = append(s.addCalls, args)
+		if s.failAddOnce && len(s.addCalls) == 1 {
+			return errors.New("add failed")
+		}
+	}
+	if err, ok := s.sendErr[address]; ok {
+		return err
+	}
 	return nil
 }
 
@@ -41,8 +62,8 @@ func TestHumanizeNotesIsDeterministicWithSeed(t *testing.T) {
 		Seed:           42,
 	}
 
-	a := humanizeNotes(notes, opts, rand.New(rand.NewSource(opts.Seed)))
-	b := humanizeNotes(notes, opts, rand.New(rand.NewSource(opts.Seed)))
+	a := humanizeNotes(notes, opts, rand.New(rand.NewSource(opts.Seed)), 0)
+	b := humanizeNotes(notes, opts, rand.New(rand.NewSource(opts.Seed)), 0)
 	if len(a) != len(b) {
 		t.Fatalf("len mismatch: %d vs %d", len(a), len(b))
 	}
@@ -67,7 +88,7 @@ func TestHumanizeNotesAppliesSwingAndBounds(t *testing.T) {
 		Strength:       1,
 		Seed:           7,
 	}
-	got := humanizeNotes(notes, opts, rand.New(rand.NewSource(opts.Seed)))
+	got := humanizeNotes(notes, opts, rand.New(rand.NewSource(opts.Seed)), 0)
 
 	if math.Abs(got[0].StartTime-applyEighthSwing(0.5, 1)) > 1e-9 {
 		t.Errorf("offbeat start = %v, want swung value", got[0].StartTime)
@@ -105,6 +126,7 @@ func TestHumanizeClip(t *testing.T) {
 			int32(36), float32(0), float32(0.25), int32(100), false,
 			int32(38), float32(1), float32(0.25), int32(100), false,
 		},
+		lengthRes: []interface{}{int32(1), int32(0), float32(4)},
 	}
 
 	got, err := humanizeClip(client, HumanizeClipInput{
@@ -128,6 +150,7 @@ func TestHumanizeClip(t *testing.T) {
 
 	wantCalls := []string{
 		"Query:/live/clip/get/notes",
+		"Query:/live/clip/get/length",
 		"Send:/live/clip/remove/notes",
 		"Send:/live/clip/add/notes",
 	}
@@ -138,6 +161,58 @@ func TestHumanizeClip(t *testing.T) {
 		if client.calls[i] != wantCalls[i] {
 			t.Errorf("calls[%d] = %q, want %q", i, client.calls[i], wantCalls[i])
 		}
+	}
+}
+
+func TestHumanizeNotesClampsToClipLength(t *testing.T) {
+	t.Parallel()
+
+	notes := []MidiNote{
+		{Pitch: 42, StartTime: 3.98, Duration: 0.125, Velocity: 80},
+	}
+	opts := humanizeOptions{
+		TimingAmount:   0.08,
+		VelocityAmount: 0,
+		Strength:       1,
+		Seed:           1,
+	}
+	got := humanizeNotes(notes, opts, rand.New(rand.NewSource(opts.Seed)), 4.0)
+	if got[0].StartTime >= 4.0 {
+		t.Errorf("start = %v, want < clip length 4.0", got[0].StartTime)
+	}
+	if got[0].StartTime < 0 {
+		t.Errorf("start = %v, want >= 0", got[0].StartTime)
+	}
+}
+
+func TestHumanizeClipRestoresOnAddFailure(t *testing.T) {
+	t.Parallel()
+
+	seed := int64(5)
+	client := &humanizeClientStub{
+		notesRes: []interface{}{
+			int32(0), int32(0),
+			int32(36), float32(0), float32(0.25), int32(100), false,
+		},
+		failAddOnce: true,
+	}
+	_, err := humanizeClip(client, HumanizeClipInput{TrackIndex: 0, ClipIndex: 0, Seed: &seed})
+	if err == nil {
+		t.Fatal("humanizeClip() error = nil, want add-failure error")
+	}
+	if !strings.Contains(err.Error(), "restored") {
+		t.Errorf("error = %q, want restore note", err)
+	}
+	if len(client.addCalls) != 2 {
+		t.Fatalf("add/notes called %d times, want 2 (humanized + restore)", len(client.addCalls))
+	}
+	// The restore call must carry the original note payload (start time 0, velocity 100).
+	restore := client.addCalls[1]
+	if len(restore) != 7 {
+		t.Fatalf("restore args len = %d, want 7", len(restore))
+	}
+	if restore[3] != float32(0) || restore[5] != int32(100) {
+		t.Errorf("restore payload = %v, want original note", restore)
 	}
 }
 
