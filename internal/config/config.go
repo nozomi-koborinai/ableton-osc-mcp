@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -20,6 +21,7 @@ type Config struct {
 	AbletonPort       int
 	AbletonClientPort int
 	Timeout           time.Duration
+	TasteProfilePath  string
 }
 
 // Load reads configuration from environment variables with defaults.
@@ -33,7 +35,24 @@ func Load() Config {
 		AbletonPort:       envInt("ABLETON_OSC_PORT", defaultAbletonPort),
 		AbletonClientPort: envInt("ABLETON_OSC_CLIENT_PORT", defaultAbletonClientPort),
 		Timeout:           envDurationMs("ABLETON_OSC_TIMEOUT_MS", defaultTimeoutMs),
+		TasteProfilePath:  envString("ABLETON_OSC_TASTE_PROFILE_PATH", defaultTasteProfilePath()),
 	}
+}
+
+func defaultTasteProfilePath() string {
+	dir, err := os.UserConfigDir()
+	if err != nil || dir == "" {
+		dir = os.TempDir()
+	}
+	return filepath.Join(dir, "ableton-osc-mcp", "taste-profile.json")
+}
+
+func envString(key string, def string) string {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return def
+	}
+	return v
 }
 
 func envInt(key string, def int) int {

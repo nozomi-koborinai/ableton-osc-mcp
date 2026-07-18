@@ -20,6 +20,7 @@ This enables AI assistants (Claude, Cursor, etc.) to interact with Ableton Live 
 - Humanize MIDI clips with microtiming, velocity variation, and swing
 - Create safe A/B drum variations that change only groove, density, or fills
 - Create safe A/B bass variations that change only octave, note length, or groove
+- Save A/B choices locally to build a taste profile and guide the next comparison
 - Autogain tracks toward a target meter level while audio is playing
 - Diagnose AbletonOSC connection and browser/master patch readiness
 - Fire clip slots
@@ -246,6 +247,8 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `ableton_humanize_clip` | Add microtiming, velocity variation, and optional swing to clip notes |
 | `ableton_create_drum_variation` | Duplicate a drum clip into an empty slot and change groove, density, or fill for A/B comparison |
 | `ableton_create_bass_variation` | Duplicate a bass clip into an empty slot and change octave, note length, or groove for A/B comparison |
+| `ableton_record_variation_preference` | Save whether the source or variation matched your taste |
+| `ableton_get_taste_profile` | Summarize saved A/B choices and suggest the next comparison |
 | `ableton_fire_clip_slot` / `ableton_stop_clip` | Fire/stop a clip |
 | `ableton_duplicate_clip_to` | Duplicate clip to another slot |
 | `ableton_set_clip_name` | Rename a clip |
@@ -276,6 +279,7 @@ Once configured, you can ask your AI assistant:
 - "Humanize the drum clip with a bit of swing"
 - "Create a groove variation of clip 0 in empty slot 1 so I can compare them"
 - "Create an octave-up variation of the bass clip in empty slot 1"
+- "I prefer the drum groove variation; save that choice and suggest what to compare next"
 - "Autogain the drum and bass tracks while the beat is playing"
 - "Find drum kits named Street in the browser"
 - "List the Drums browser folder, then load Street Kit onto track 0"
@@ -315,6 +319,7 @@ In most cases, the default settings work fine. Change these only if:
 | `ABLETON_OSC_PORT` | `11000` | AbletonOSC listen port |
 | `ABLETON_OSC_CLIENT_PORT` | `11001` | Port for receiving replies |
 | `ABLETON_OSC_TIMEOUT_MS` | `500` | Query timeout in milliseconds |
+| `ABLETON_OSC_TASTE_PROFILE_PATH` | OS user config directory / `ableton-osc-mcp/taste-profile.json` | Local path for saved A/B preferences |
 
 </details>
 

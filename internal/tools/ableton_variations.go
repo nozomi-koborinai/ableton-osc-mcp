@@ -77,7 +77,7 @@ func createDrumVariation(client variationClient, input CreateDrumVariationInput)
 	}
 
 	variation := strings.ToLower(strings.TrimSpace(input.Variation))
-	if variation != "groove" && variation != "density" && variation != "fill" {
+	if !isDrumVariation(variation) {
 		return CreateDrumVariationOutput{}, errors.New("variation must be groove, density, or fill")
 	}
 	opts, err := resolveVariationOptions(input)
@@ -181,6 +181,15 @@ func createDrumVariation(client variationClient, input CreateDrumVariationInput)
 		Seed:            opts.Seed,
 		Fired:           fired,
 	}, nil
+}
+
+func isDrumVariation(variation string) bool {
+	switch variation {
+	case "groove", "density", "fill":
+		return true
+	default:
+		return false
+	}
 }
 
 func resolveVariationOptions(input CreateDrumVariationInput) (variationOptions, error) {
