@@ -3,6 +3,7 @@ package tools
 import (
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -15,7 +16,10 @@ import (
 const (
 	defaultAuditionBarsPerVersion = 2
 	defaultAuditionCycles         = 1
-	defaultAuditionBeatsPerBar    = 4
+	// Live clip_trigger_quantization: 4 = 1 Bar (see Live Object Model).
+	auditionBarQuantization = 4
+	auditionSongTimeEpsilon = 1e-3
+	auditionPollInterval    = 20 * time.Millisecond
 )
 
 type AuditionABInput struct {
@@ -25,8 +29,8 @@ type AuditionABInput struct {
 	VariationIndex int    `json:"variation_index" jsonschema:"description=B version: clip slot or scene index,minimum=0"`
 	BarsPerVersion *int   `json:"bars_per_version,omitempty" jsonschema:"description=Bars to hear each version (default 2),minimum=1,maximum=8"`
 	Cycles         *int   `json:"cycles,omitempty" jsonschema:"description=How many A→B cycles to play (default 1),minimum=1,maximum=4"`
-	BeatsPerBar    *int   `json:"beats_per_bar,omitempty" jsonschema:"description=Beats per bar for duration calculation (default 4),minimum=1,maximum=16"`
-	StartPlayback  bool   `json:"start_playback,omitempty" jsonschema:"description=Start Live playback before the audition"`
+	BeatsPerBar    *int   `json:"beats_per_bar,omitempty" jsonschema:"description=Override beats per bar (default: Live signature numerator),minimum=1,maximum=16"`
+	StartPlayback  bool   `json:"start_playback,omitempty" jsonschema:"description=Start Live playback before the audition (also auto-starts when transport is stopped)"`
 	StopAfter      bool   `json:"stop_after,omitempty" jsonschema:"description=Stop playback after the final B version"`
 }
 
@@ -37,8 +41,10 @@ type AuditionABOutput struct {
 	VariationIndex   int     `json:"variation_index"`
 	BarsPerVersion   int     `json:"bars_per_version"`
 	Cycles           int     `json:"cycles"`
+	BeatsPerBar      int     `json:"beats_per_bar"`
 	TempoBPM         float64 `json:"tempo_bpm"`
 	DurationSec      float64 `json:"duration_sec"`
+	PlaybackStarted  bool    `json:"playback_started"`
 	FinalVersion     string  `json:"final_version"`
 	TimingNote       string  `json:"timing_note"`
 	PreferencePrompt string  `json:"preference_prompt"`
@@ -53,7 +59,7 @@ type auditionSleeper func(time.Duration)
 
 func NewAbletonAuditionAB(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
 	return genkit.DefineTool(g, "ableton_audition_ab",
-		"Ableton Live: audition an A and B clip or scene in alternating bar-length sections, then prompt for a preference",
+		"Ableton Live: audition an A and B clip or scene in alternating bar-length sections synced to song time, then prompt for a preference",
 		func(_ *ai.ToolContext, input AuditionABInput) (AuditionABOutput, error) {
 			return auditionAB(client, input, time.Sleep)
 		},
@@ -61,7 +67,7 @@ func NewAbletonAuditionAB(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
 }
 
 func auditionAB(client auditionClient, input AuditionABInput, sleep auditionSleeper) (AuditionABOutput, error) {
-	targetType, bars, cycles, beatsPerBar, err := validateAuditionInput(input)
+	targetType, bars, cycles, beatsPerBarOverride, err := validateAuditionInput(input)
 	if err != nil {
 		return AuditionABOutput{}, err
 	}
@@ -69,46 +75,68 @@ func auditionAB(client auditionClient, input AuditionABInput, sleep auditionSlee
 		sleep = time.Sleep
 	}
 
-	tempoRes, err := client.Query("/live/song/get/tempo")
+	tempo, err := queryAuditionTempo(client)
 	if err != nil {
-		return AuditionABOutput{}, fmt.Errorf("get tempo: %w", err)
+		return AuditionABOutput{}, err
 	}
-	if err := ensureResponseLen(tempoRes, 1); err != nil {
-		return AuditionABOutput{}, fmt.Errorf("get tempo: %w", err)
-	}
-	tempo, err := abletonosc.AsFloat64(tempoRes[0])
-	if err != nil || tempo <= 0 {
-		return AuditionABOutput{}, fmt.Errorf("unexpected tempo: %v", tempoRes)
-	}
-	wait := auditionWaitDuration(tempo, bars, beatsPerBar)
-
-	if input.StartPlayback {
-		if err := client.Send("/live/song/start_playing"); err != nil {
-			return AuditionABOutput{}, fmt.Errorf("start playback: %w", err)
+	beatsPerBar := beatsPerBarOverride
+	if beatsPerBar == 0 {
+		beatsPerBar, err = queryAuditionBeatsPerBar(client)
+		if err != nil {
+			return AuditionABOutput{}, err
 		}
 	}
 
+	playbackStarted, err := ensureAuditionPlayback(client, input.StartPlayback)
+	if err != nil {
+		return AuditionABOutput{}, err
+	}
+
+	prevQuant, err := queryClipTriggerQuantization(client)
+	if err != nil {
+		return AuditionABOutput{}, err
+	}
+	if err := client.Send("/live/song/set/clip_trigger_quantization", int32(auditionBarQuantization)); err != nil {
+		return AuditionABOutput{}, fmt.Errorf("set clip trigger quantization: %w", err)
+	}
+	restoreQuant := true
+	defer func() {
+		if restoreQuant {
+			_ = client.Send("/live/song/set/clip_trigger_quantization", int32(prevQuant))
+		}
+	}()
+
+	heardBeats := 0.0
 	for i := 0; i < cycles; i++ {
-		if err := fireAuditionTarget(client, targetType, input.TrackIndex, input.SourceIndex); err != nil {
+		heard, err := fireAndHearAudition(client, sleep, targetType, input.TrackIndex, input.SourceIndex, bars, beatsPerBar, tempo)
+		if err != nil {
 			return AuditionABOutput{}, fmt.Errorf("fire A (cycle %d): %w", i+1, err)
 		}
-		sleep(wait)
-		if err := fireAuditionTarget(client, targetType, input.TrackIndex, input.VariationIndex); err != nil {
+		heardBeats += heard
+		heard, err = fireAndHearAudition(client, sleep, targetType, input.TrackIndex, input.VariationIndex, bars, beatsPerBar, tempo)
+		if err != nil {
 			return AuditionABOutput{}, fmt.Errorf("fire B (cycle %d): %w", i+1, err)
 		}
-		sleep(wait)
+		heardBeats += heard
 	}
+
 	if input.StopAfter {
 		if err := client.Send("/live/song/stop_playing"); err != nil {
 			return AuditionABOutput{}, fmt.Errorf("stop playback: %w", err)
 		}
 	}
 
+	if err := client.Send("/live/song/set/clip_trigger_quantization", int32(prevQuant)); err != nil {
+		return AuditionABOutput{}, fmt.Errorf("restore clip trigger quantization: %w", err)
+	}
+	restoreQuant = false
+
 	var trackIndex *int
 	if input.TrackIndex != nil {
 		index := *input.TrackIndex
 		trackIndex = &index
 	}
+	durationSec := heardBeats * 60 / tempo
 	return AuditionABOutput{
 		TargetType:       targetType,
 		TrackIndex:       trackIndex,
@@ -116,12 +144,167 @@ func auditionAB(client auditionClient, input AuditionABInput, sleep auditionSlee
 		VariationIndex:   input.VariationIndex,
 		BarsPerVersion:   bars,
 		Cycles:           cycles,
+		BeatsPerBar:      beatsPerBar,
 		TempoBPM:         tempo,
-		DurationSec:      wait.Seconds() * float64(cycles*2),
+		DurationSec:      durationSec,
+		PlaybackStarted:  playbackStarted,
 		FinalVersion:     "variation",
-		TimingNote:       "Uses Live's current global quantization; duration is a tempo-based estimate.",
+		TimingNote:       "Waits on Live song time with 1-bar clip trigger quantization (restored afterward). Switches land on the next bar boundary.",
 		PreferencePrompt: "Which was closer to your ideal: source or variation? Record the choice with ableton_record_variation_preference.",
 	}, nil
+}
+
+func fireAndHearAudition(
+	client auditionClient,
+	sleep auditionSleeper,
+	targetType string,
+	trackIndex *int,
+	index, bars, beatsPerBar int,
+	tempo float64,
+) (float64, error) {
+	now, err := queryCurrentSongTime(client)
+	if err != nil {
+		return 0, err
+	}
+	if err := fireAuditionTarget(client, targetType, trackIndex, index); err != nil {
+		return 0, err
+	}
+	launchBeat := ceilBarBeat(now, beatsPerBar)
+	endBeat := launchBeat + float64(bars*beatsPerBar)
+	if err := waitUntilSongTime(client, sleep, endBeat, tempo); err != nil {
+		return 0, err
+	}
+	return endBeat - now, nil
+}
+
+func ensureAuditionPlayback(client auditionClient, forceStart bool) (bool, error) {
+	playing, err := queryAuditionIsPlaying(client)
+	if err != nil {
+		return false, err
+	}
+	if playing && !forceStart {
+		return false, nil
+	}
+	if err := client.Send("/live/song/start_playing"); err != nil {
+		return false, fmt.Errorf("start playback: %w", err)
+	}
+	return !playing, nil
+}
+
+func queryAuditionTempo(client auditionClient) (float64, error) {
+	tempoRes, err := client.Query("/live/song/get/tempo")
+	if err != nil {
+		return 0, fmt.Errorf("get tempo: %w", err)
+	}
+	if err := ensureResponseLen(tempoRes, 1); err != nil {
+		return 0, fmt.Errorf("get tempo: %w", err)
+	}
+	tempo, err := abletonosc.AsFloat64(tempoRes[0])
+	if err != nil || tempo <= 0 {
+		return 0, fmt.Errorf("unexpected tempo: %v", tempoRes)
+	}
+	return tempo, nil
+}
+
+func queryAuditionBeatsPerBar(client auditionClient) (int, error) {
+	res, err := client.Query("/live/song/get/signature_numerator")
+	if err != nil {
+		return 0, fmt.Errorf("get signature numerator: %w", err)
+	}
+	if err := ensureResponseLen(res, 1); err != nil {
+		return 0, fmt.Errorf("get signature numerator: %w", err)
+	}
+	beats, err := abletonosc.AsInt(res[0])
+	if err != nil || beats < 1 || beats > 16 {
+		return 0, fmt.Errorf("unexpected signature numerator: %v", res)
+	}
+	return beats, nil
+}
+
+func queryAuditionIsPlaying(client auditionClient) (bool, error) {
+	res, err := client.Query("/live/song/get/is_playing")
+	if err != nil {
+		return false, fmt.Errorf("get playback state: %w", err)
+	}
+	if err := ensureResponseLen(res, 1); err != nil {
+		return false, fmt.Errorf("get playback state: %w", err)
+	}
+	playing, err := abletonosc.AsBool(res[0])
+	if err != nil {
+		return false, fmt.Errorf("get playback state: %w", err)
+	}
+	return playing, nil
+}
+
+func queryClipTriggerQuantization(client auditionClient) (int, error) {
+	res, err := client.Query("/live/song/get/clip_trigger_quantization")
+	if err != nil {
+		return 0, fmt.Errorf("get clip trigger quantization: %w", err)
+	}
+	if err := ensureResponseLen(res, 1); err != nil {
+		return 0, fmt.Errorf("get clip trigger quantization: %w", err)
+	}
+	quant, err := abletonosc.AsInt(res[0])
+	if err != nil {
+		return 0, fmt.Errorf("get clip trigger quantization: %w", err)
+	}
+	return quant, nil
+}
+
+func queryCurrentSongTime(client auditionClient) (float64, error) {
+	res, err := client.Query("/live/song/get/current_song_time")
+	if err != nil {
+		return 0, fmt.Errorf("get current song time: %w", err)
+	}
+	if err := ensureResponseLen(res, 1); err != nil {
+		return 0, fmt.Errorf("get current song time: %w", err)
+	}
+	songTime, err := abletonosc.AsFloat64(res[0])
+	if err != nil {
+		return 0, fmt.Errorf("get current song time: %w", err)
+	}
+	return songTime, nil
+}
+
+func waitUntilSongTime(client auditionClient, sleep auditionSleeper, targetBeats, tempo float64) error {
+	remainingBeats := targetBeats
+	if now, err := queryCurrentSongTime(client); err == nil {
+		remainingBeats = targetBeats - now
+	}
+	if remainingBeats < 0 {
+		remainingBeats = 0
+	}
+	// Wall-clock deadline guards against a stuck transport; allow 2x expected wait + 2s.
+	timeout := time.Duration((remainingBeats*60/tempo)*2*float64(time.Second)) + 2*time.Second
+	deadline := time.Now().Add(timeout)
+
+	for {
+		now, err := queryCurrentSongTime(client)
+		if err != nil {
+			return err
+		}
+		if now+auditionSongTimeEpsilon >= targetBeats {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timed out waiting for song time %.3f (last %.3f)", targetBeats, now)
+		}
+		sleep(auditionPollInterval)
+	}
+}
+
+// ceilBarBeat returns the next bar boundary strictly after songTime when quantized to 1 bar.
+// Firing exactly on a downbeat still waits for the following bar under Live's 1-bar quantization.
+func ceilBarBeat(songTime float64, beatsPerBar int) float64 {
+	bpb := float64(beatsPerBar)
+	if bpb <= 0 {
+		return songTime
+	}
+	barStart := math.Floor(songTime/bpb+auditionSongTimeEpsilon) * bpb
+	if songTime-barStart <= auditionSongTimeEpsilon {
+		return barStart + bpb
+	}
+	return barStart + bpb
 }
 
 func validateAuditionInput(input AuditionABInput) (string, int, int, int, error) {
@@ -154,18 +337,18 @@ func validateAuditionInput(input AuditionABInput) (string, int, int, int, error)
 	if input.Cycles != nil {
 		cycles = *input.Cycles
 	}
-	beatsPerBar := defaultAuditionBeatsPerBar
+	beatsPerBar := 0
 	if input.BeatsPerBar != nil {
 		beatsPerBar = *input.BeatsPerBar
+		if beatsPerBar < 1 || beatsPerBar > 16 {
+			return "", 0, 0, 0, errors.New("beats_per_bar must be between 1 and 16")
+		}
 	}
 	if bars < 1 || bars > 8 {
 		return "", 0, 0, 0, errors.New("bars_per_version must be between 1 and 8")
 	}
 	if cycles < 1 || cycles > 4 {
 		return "", 0, 0, 0, errors.New("cycles must be between 1 and 4")
-	}
-	if beatsPerBar < 1 || beatsPerBar > 16 {
-		return "", 0, 0, 0, errors.New("beats_per_bar must be between 1 and 16")
 	}
 	return targetType, bars, cycles, beatsPerBar, nil
 }
@@ -175,9 +358,4 @@ func fireAuditionTarget(client auditionClient, targetType string, trackIndex *in
 		return client.Send("/live/scene/fire", int32(index))
 	}
 	return client.Send("/live/clip_slot/fire", int32(*trackIndex), int32(index))
-}
-
-func auditionWaitDuration(tempo float64, bars, beatsPerBar int) time.Duration {
-	seconds := float64(bars*beatsPerBar) * 60 / tempo
-	return time.Duration(seconds * float64(time.Second))
 }
