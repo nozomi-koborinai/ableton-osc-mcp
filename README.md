@@ -23,7 +23,7 @@ This enables AI assistants (Claude, Cursor, etc.) to interact with Ableton Live 
 - Save A/B choices locally to build a taste profile and guide the next comparison
 - Compare small mix-balance hypotheses, then restore the original volume snapshot
 - Duplicate a scene and compare an energy lift or pullback on selected MIDI tracks
-- Audition A/B clips or scenes automatically in alternating bar-length sections
+- Audition A/B clips or scenes automatically on Live song time (1-bar quantization)
 - Autogain tracks toward a target meter level while audio is playing
 - Diagnose AbletonOSC connection and browser/master patch readiness
 - Fire clip slots
@@ -250,7 +250,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `ableton_humanize_clip` | Add microtiming, velocity variation, and optional swing to clip notes |
 | `ableton_create_drum_variation` | Duplicate a drum clip into an empty slot and change groove, density, or fill for A/B comparison |
 | `ableton_create_bass_variation` | Duplicate a bass clip into an empty slot and change octave, note length, or groove for A/B comparison |
-| `ableton_audition_ab` | Alternate A/B clips or scenes for a specified number of bars and cycles |
+| `ableton_audition_ab` | Alternate A/B clips or scenes for N bars, waiting on Live song time with 1-bar launch quantization |
 | `ableton_record_variation_preference` | Save whether the source or variation matched your taste |
 | `ableton_get_taste_profile` | Summarize saved A/B choices and suggest the next comparison |
 | `ableton_fire_clip_slot` / `ableton_stop_clip` | Fire/stop a clip |
