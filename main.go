@@ -105,6 +105,7 @@ func main() {
 		tools.NewAbletonGetMasterDeviceParameters(g, ableton),
 		tools.NewAbletonSetMasterDeviceParameter(g, ableton),
 		tools.NewAbletonLoadOnMaster(g, ableton),
+		tools.NewAbletonAutogainTracks(g, ableton),
 
 		// Bounce / Session Record
 		tools.NewAbletonGetSessionRecord(g, ableton),

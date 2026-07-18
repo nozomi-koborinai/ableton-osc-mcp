@@ -18,6 +18,7 @@ This enables AI assistants (Claude, Cursor, etc.) to interact with Ableton Live 
 - Browse Live Browser folders by path and load items onto tracks
 - Set up a drum track with kit + clip + pattern in one recipe
 - Humanize MIDI clips with microtiming, velocity variation, and swing
+- Autogain tracks toward a target meter level while audio is playing
 - Diagnose AbletonOSC connection and browser/master patch readiness
 - Fire clip slots
 - Send raw OSC messages for advanced control
@@ -252,6 +253,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `ableton_load_browser_path` | Load Browser item onto a track by exact path (requires patch) |
 | `ableton_load_device_preset` | Hotswap a preset onto a device |
 | `ableton_get_track_meter` | Track output meter levels |
+| `ableton_autogain_tracks` | Iteratively adjust track volumes toward a target meter level |
 | `ableton_get_master_meter` / `ableton_get_master_volume` / `ableton_set_master_volume` | Master meter/volume (requires master patch) |
 | `ableton_get_master_devices` / `ableton_get_master_device_parameters` / `ableton_set_master_device_parameter` | Master devices (requires master patch) |
 | `ableton_load_on_master` | Load Browser item onto master (requires browser+master patch) |
@@ -268,6 +270,7 @@ Once configured, you can ask your AI assistant:
 - "Create a MIDI track, load Street Kit, and add a 4-bar clip"
 - "Set up a Street Kit drum track with a four-on-floor pattern"
 - "Humanize the drum clip with a bit of swing"
+- "Autogain the drum and bass tracks while the beat is playing"
 - "Find drum kits named Street in the browser"
 - "List the Drums browser folder, then load Street Kit onto track 0"
 - "Add a kick drum pattern on beats 1, 2, 3, 4"
