@@ -3,6 +3,7 @@ package tools
 import (
 	"errors"
 	"math"
+	"strings"
 	"testing"
 )
 
@@ -82,6 +83,9 @@ func TestApplyMixVariationAndRestore(t *testing.T) {
 	}
 	if math.Abs(client.volumes[1]-0.6) > 1e-6 {
 		t.Errorf("track 1 volume = %v, want 0.6", client.volumes[1])
+	}
+	if !strings.Contains(got.PreferencePrompt, "instrument=mix variation=volume") {
+		t.Errorf("preference_prompt = %q", got.PreferencePrompt)
 	}
 
 	restored, err := restoreMixSnapshot(client, got.Before.Tracks)

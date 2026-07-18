@@ -32,6 +32,30 @@ func TestValidateTastePreference(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected invalid drum variation error")
 	}
+
+	got, err = validateTastePreference(RecordVariationPreferenceInput{
+		Instrument: "scene",
+		Variation:  "lift",
+		Preferred:  "source",
+	})
+	if err != nil {
+		t.Fatalf("scene preference error = %v", err)
+	}
+	if got.Instrument != "scene" || got.Variation != "lift" {
+		t.Errorf("scene preference = %#v", got)
+	}
+
+	got, err = validateTastePreference(RecordVariationPreferenceInput{
+		Instrument: "mix",
+		Variation:  "volume",
+		Preferred:  "variation",
+	})
+	if err != nil {
+		t.Fatalf("mix preference error = %v", err)
+	}
+	if got.Instrument != "mix" || got.Variation != "volume" {
+		t.Errorf("mix preference = %#v", got)
+	}
 }
 
 func TestTasteProfileOutput(t *testing.T) {
@@ -43,21 +67,43 @@ func TestTasteProfileOutput(t *testing.T) {
 			{Instrument: "drum", Variation: "groove", Preferred: "variation"},
 			{Instrument: "drum", Variation: "groove", Preferred: "source"},
 			{Instrument: "bass", Variation: "octave_up", Preferred: "variation"},
+			{Instrument: "scene", Variation: "lift", Preferred: "variation"},
 		},
 	}
 	got := tasteProfileOutput(profile, "/tmp/taste-profile.json")
-	if got.PreferencesRecorded != 3 {
-		t.Errorf("PreferencesRecorded = %d, want 3", got.PreferencesRecorded)
+	if got.PreferencesRecorded != 4 {
+		t.Errorf("PreferencesRecorded = %d, want 4", got.PreferencesRecorded)
 	}
-	if len(got.Summaries) != 2 {
-		t.Fatalf("summaries = %#v, want 2", got.Summaries)
-	}
-	if got.Summaries[1].Instrument != "drum" || got.Summaries[1].Variation != "groove" || got.Summaries[1].Accepted != 1 || got.Summaries[1].Rejected != 1 {
-		t.Errorf("drum summary = %#v, want groove 1/1", got.Summaries[1])
+	if len(got.Summaries) != 3 {
+		t.Fatalf("summaries = %#v, want 3", got.Summaries)
 	}
 	joined := strings.Join(got.NextSuggestions, "\n")
 	if !strings.Contains(joined, "drum density") || !strings.Contains(joined, "bass groove") {
 		t.Errorf("NextSuggestions = %v", got.NextSuggestions)
+	}
+	if !strings.Contains(joined, "scene pullback") || !strings.Contains(joined, "mix volume") {
+		t.Errorf("NextSuggestions missing scene/mix = %v", got.NextSuggestions)
+	}
+	if len(got.NextSuggestions) != 4 {
+		t.Errorf("want 4 family suggestions, got %v", got.NextSuggestions)
+	}
+}
+
+func TestTasteProfileColdStartSuggestions(t *testing.T) {
+	t.Parallel()
+
+	got := tasteProfileOutput(taste.Profile{Version: 1}, "/tmp/taste-profile.json")
+	if got.PreferencesRecorded != 0 {
+		t.Fatalf("PreferencesRecorded = %d", got.PreferencesRecorded)
+	}
+	if len(got.NextSuggestions) != 4 {
+		t.Fatalf("cold start suggestions = %v, want 4", got.NextSuggestions)
+	}
+	joined := strings.Join(got.NextSuggestions, "\n")
+	for _, want := range []string{"bass groove", "drum density", "mix volume", "scene lift"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("cold start missing %q in %v", want, got.NextSuggestions)
+		}
 	}
 }
 

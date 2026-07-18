@@ -36,8 +36,9 @@ type ApplyMixVariationInput struct {
 }
 
 type ApplyMixVariationOutput struct {
-	Before MixSnapshotOutput `json:"before" jsonschema:"description=Use this snapshot with ableton_restore_mix_snapshot to return to A"`
-	After  MixSnapshotOutput `json:"after"`
+	Before           MixSnapshotOutput `json:"before" jsonschema:"description=Use this snapshot with ableton_restore_mix_snapshot to return to A"`
+	After            MixSnapshotOutput `json:"after"`
+	PreferencePrompt string            `json:"preference_prompt"`
 }
 
 type RestoreMixSnapshotInput struct {
@@ -120,8 +121,9 @@ func applyMixVariation(client mixABClient, input ApplyMixVariationInput) (ApplyM
 		return ApplyMixVariationOutput{}, err
 	}
 	return ApplyMixVariationOutput{
-		Before: before,
-		After:  MixSnapshotOutput{Tracks: afterTracks},
+		Before:           before,
+		After:            MixSnapshotOutput{Tracks: afterTracks},
+		PreferencePrompt: "After comparing A/B, record with ableton_record_variation_preference using instrument=mix variation=volume, then restore A with ableton_restore_mix_snapshot.",
 	}, nil
 }
 

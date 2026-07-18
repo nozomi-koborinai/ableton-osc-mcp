@@ -13,8 +13,8 @@ import (
 )
 
 type RecordVariationPreferenceInput struct {
-	Instrument string `json:"instrument" jsonschema:"description=Instrument family: drum or bass"`
-	Variation  string `json:"variation" jsonschema:"description=Variation that was compared (e.g. groove, density, octave_up)"`
+	Instrument string `json:"instrument" jsonschema:"description=Comparison family: drum, bass, scene, or mix"`
+	Variation  string `json:"variation" jsonschema:"description=Variation that was compared (e.g. groove, lift, volume)"`
 	Preferred  string `json:"preferred" jsonschema:"description=Which version you preferred: source or variation"`
 	Note       string `json:"note,omitempty" jsonschema:"description=Optional short reason for the choice (max 500 characters)"`
 }
@@ -47,9 +47,11 @@ type tasteStore interface {
 	Path() string
 }
 
+var tasteInstrumentOrder = []string{"bass", "drum", "mix", "scene"}
+
 func NewAbletonRecordVariationPreference(g *genkit.Genkit, store tasteStore) ai.Tool {
 	return genkit.DefineTool(g, "ableton_record_variation_preference",
-		"Ableton Live: record whether an A/B drum or bass variation matched your taste",
+		"Ableton Live: record whether an A/B drum, bass, scene, or mix variation matched your taste",
 		func(_ *ai.ToolContext, input RecordVariationPreferenceInput) (TasteProfileOutput, error) {
 			preference, err := validateTastePreference(input)
 			if err != nil {
@@ -90,17 +92,8 @@ func validateTastePreference(input RecordVariationPreferenceInput) (taste.Prefer
 	preferred := strings.ToLower(strings.TrimSpace(input.Preferred))
 	note := strings.TrimSpace(input.Note)
 
-	switch instrument {
-	case "drum":
-		if !isDrumVariation(variation) {
-			return taste.Preference{}, errors.New("drum variation must be groove, density, or fill")
-		}
-	case "bass":
-		if !isBassVariation(variation) {
-			return taste.Preference{}, errors.New("bass variation must be octave_up, octave_down, staccato, or groove")
-		}
-	default:
-		return taste.Preference{}, errors.New("instrument must be drum or bass")
+	if err := validateTasteInstrumentVariation(instrument, variation); err != nil {
+		return taste.Preference{}, err
 	}
 	if preferred != "source" && preferred != "variation" {
 		return taste.Preference{}, errors.New("preferred must be source or variation")
@@ -114,6 +107,38 @@ func validateTastePreference(input RecordVariationPreferenceInput) (taste.Prefer
 		Preferred:  preferred,
 		Note:       note,
 	}, nil
+}
+
+func validateTasteInstrumentVariation(instrument, variation string) error {
+	switch instrument {
+	case "drum":
+		if !isDrumVariation(variation) {
+			return errors.New("drum variation must be groove, density, or fill")
+		}
+	case "bass":
+		if !isBassVariation(variation) {
+			return errors.New("bass variation must be octave_up, octave_down, staccato, or groove")
+		}
+	case "scene":
+		if !isSceneVariation(variation) {
+			return errors.New("scene variation must be lift or pullback")
+		}
+	case "mix":
+		if !isMixVariation(variation) {
+			return errors.New("mix variation must be volume")
+		}
+	default:
+		return errors.New("instrument must be drum, bass, scene, or mix")
+	}
+	return nil
+}
+
+func isSceneVariation(variation string) bool {
+	return variation == "lift" || variation == "pullback"
+}
+
+func isMixVariation(variation string) bool {
+	return variation == "volume"
 }
 
 func tasteProfileOutput(profile taste.Profile, path string) TasteProfileOutput {
@@ -164,9 +189,9 @@ func tasteProfileOutput(profile taste.Profile, path string) TasteProfileOutput {
 }
 
 func nextTasteSuggestions(summaries []TasteSummary) []string {
-	byInstrument := map[string]map[string]int{
-		"drum": {},
-		"bass": {},
+	byInstrument := map[string]map[string]int{}
+	for _, instrument := range tasteInstrumentOrder {
+		byInstrument[instrument] = map[string]int{}
 	}
 	for _, summary := range summaries {
 		if _, ok := byInstrument[summary.Instrument]; ok {
@@ -174,13 +199,9 @@ func nextTasteSuggestions(summaries []TasteSummary) []string {
 		}
 	}
 
-	suggestions := make([]string, 0, 2)
-	for _, instrument := range []string{"drum", "bass"} {
-		counts := byInstrument[instrument]
-		if len(counts) == 0 {
-			continue
-		}
-		next := leastComparedVariation(instrument, counts)
+	suggestions := make([]string, 0, len(tasteInstrumentOrder))
+	for _, instrument := range tasteInstrumentOrder {
+		next := leastComparedVariation(instrument, byInstrument[instrument])
 		suggestions = append(suggestions,
 			fmt.Sprintf("Try a %s %s variation next; it has been compared least often.", instrument, next),
 		)
@@ -189,14 +210,7 @@ func nextTasteSuggestions(summaries []TasteSummary) []string {
 }
 
 func leastComparedVariation(instrument string, counts map[string]int) string {
-	var candidates []string
-	switch instrument {
-	case "drum":
-		candidates = []string{"density", "fill", "groove"}
-	case "bass":
-		candidates = []string{"groove", "octave_down", "octave_up", "staccato"}
-	}
-
+	candidates := tasteVariationsFor(instrument)
 	next := candidates[0]
 	for _, candidate := range candidates[1:] {
 		if counts[candidate] < counts[next] {
@@ -204,4 +218,19 @@ func leastComparedVariation(instrument string, counts map[string]int) string {
 		}
 	}
 	return next
+}
+
+func tasteVariationsFor(instrument string) []string {
+	switch instrument {
+	case "drum":
+		return []string{"density", "fill", "groove"}
+	case "bass":
+		return []string{"groove", "octave_down", "octave_up", "staccato"}
+	case "scene":
+		return []string{"lift", "pullback"}
+	case "mix":
+		return []string{"volume"}
+	default:
+		return nil
+	}
 }

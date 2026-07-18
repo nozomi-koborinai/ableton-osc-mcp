@@ -30,6 +30,8 @@ type AuditionABInput struct {
 	BarsPerVersion *int   `json:"bars_per_version,omitempty" jsonschema:"description=Bars to hear each version (default 2),minimum=1,maximum=8"`
 	Cycles         *int   `json:"cycles,omitempty" jsonschema:"description=How many A→B cycles to play (default 1),minimum=1,maximum=4"`
 	BeatsPerBar    *int   `json:"beats_per_bar,omitempty" jsonschema:"description=Override beats per bar (default: Live signature numerator),minimum=1,maximum=16"`
+	Instrument     string `json:"instrument,omitempty" jsonschema:"description=Optional taste family for the preference prompt: drum or bass for clips; scene for scenes"`
+	Variation      string `json:"variation,omitempty" jsonschema:"description=Optional variation that was compared (e.g. groove, lift) for the preference prompt"`
 	StartPlayback  bool   `json:"start_playback,omitempty" jsonschema:"description=Start Live playback before the audition (also auto-starts when transport is stopped)"`
 	StopAfter      bool   `json:"stop_after,omitempty" jsonschema:"description=Stop playback after the final B version"`
 }
@@ -45,6 +47,8 @@ type AuditionABOutput struct {
 	TempoBPM         float64 `json:"tempo_bpm"`
 	DurationSec      float64 `json:"duration_sec"`
 	PlaybackStarted  bool    `json:"playback_started"`
+	Instrument       string  `json:"instrument,omitempty"`
+	Variation        string  `json:"variation,omitempty"`
 	FinalVersion     string  `json:"final_version"`
 	TimingNote       string  `json:"timing_note"`
 	PreferencePrompt string  `json:"preference_prompt"`
@@ -67,7 +71,7 @@ func NewAbletonAuditionAB(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
 }
 
 func auditionAB(client auditionClient, input AuditionABInput, sleep auditionSleeper) (AuditionABOutput, error) {
-	targetType, bars, cycles, beatsPerBarOverride, err := validateAuditionInput(input)
+	targetType, bars, cycles, beatsPerBarOverride, instrument, variation, err := validateAuditionInput(input)
 	if err != nil {
 		return AuditionABOutput{}, err
 	}
@@ -148,9 +152,11 @@ func auditionAB(client auditionClient, input AuditionABInput, sleep auditionSlee
 		TempoBPM:         tempo,
 		DurationSec:      durationSec,
 		PlaybackStarted:  playbackStarted,
+		Instrument:       instrument,
+		Variation:        variation,
 		FinalVersion:     "variation",
 		TimingNote:       "Waits on Live song time with 1-bar clip trigger quantization (restored afterward). Switches land on the next bar boundary.",
-		PreferencePrompt: "Which was closer to your ideal: source or variation? Record the choice with ableton_record_variation_preference.",
+		PreferencePrompt: auditionPreferencePrompt(targetType, instrument, variation),
 	}, nil
 }
 
@@ -307,26 +313,26 @@ func ceilBarBeat(songTime float64, beatsPerBar int) float64 {
 	return barStart + bpb
 }
 
-func validateAuditionInput(input AuditionABInput) (string, int, int, int, error) {
+func validateAuditionInput(input AuditionABInput) (string, int, int, int, string, string, error) {
 	targetType := strings.ToLower(strings.TrimSpace(input.TargetType))
 	if targetType != "clip" && targetType != "scene" {
-		return "", 0, 0, 0, errors.New("target_type must be clip or scene")
+		return "", 0, 0, 0, "", "", errors.New("target_type must be clip or scene")
 	}
 	if input.SourceIndex < 0 || input.VariationIndex < 0 {
-		return "", 0, 0, 0, errors.New("source_index and variation_index must be >= 0")
+		return "", 0, 0, 0, "", "", errors.New("source_index and variation_index must be >= 0")
 	}
 	if input.SourceIndex == input.VariationIndex {
-		return "", 0, 0, 0, errors.New("source_index and variation_index must differ")
+		return "", 0, 0, 0, "", "", errors.New("source_index and variation_index must differ")
 	}
 	if targetType == "clip" {
 		if input.TrackIndex == nil {
-			return "", 0, 0, 0, errors.New("track_index is required for clip auditions")
+			return "", 0, 0, 0, "", "", errors.New("track_index is required for clip auditions")
 		}
 		if *input.TrackIndex < 0 {
-			return "", 0, 0, 0, errors.New("track_index must be >= 0")
+			return "", 0, 0, 0, "", "", errors.New("track_index must be >= 0")
 		}
 	} else if input.TrackIndex != nil {
-		return "", 0, 0, 0, errors.New("track_index must be omitted for scene auditions")
+		return "", 0, 0, 0, "", "", errors.New("track_index must be omitted for scene auditions")
 	}
 
 	bars := defaultAuditionBarsPerVersion
@@ -341,16 +347,72 @@ func validateAuditionInput(input AuditionABInput) (string, int, int, int, error)
 	if input.BeatsPerBar != nil {
 		beatsPerBar = *input.BeatsPerBar
 		if beatsPerBar < 1 || beatsPerBar > 16 {
-			return "", 0, 0, 0, errors.New("beats_per_bar must be between 1 and 16")
+			return "", 0, 0, 0, "", "", errors.New("beats_per_bar must be between 1 and 16")
 		}
 	}
 	if bars < 1 || bars > 8 {
-		return "", 0, 0, 0, errors.New("bars_per_version must be between 1 and 8")
+		return "", 0, 0, 0, "", "", errors.New("bars_per_version must be between 1 and 8")
 	}
 	if cycles < 1 || cycles > 4 {
-		return "", 0, 0, 0, errors.New("cycles must be between 1 and 4")
+		return "", 0, 0, 0, "", "", errors.New("cycles must be between 1 and 4")
 	}
-	return targetType, bars, cycles, beatsPerBar, nil
+
+	instrument, variation, err := validateAuditionTasteHint(targetType, input.Instrument, input.Variation)
+	if err != nil {
+		return "", 0, 0, 0, "", "", err
+	}
+	return targetType, bars, cycles, beatsPerBar, instrument, variation, nil
+}
+
+func validateAuditionTasteHint(targetType, instrument, variation string) (string, string, error) {
+	instrument = strings.ToLower(strings.TrimSpace(instrument))
+	variation = strings.ToLower(strings.TrimSpace(variation))
+	if instrument == "" && variation == "" {
+		return "", "", nil
+	}
+	if instrument == "" {
+		if targetType == "scene" {
+			instrument = "scene"
+		} else {
+			return "", "", errors.New("instrument is required when variation is set for clip auditions")
+		}
+	}
+	switch targetType {
+	case "clip":
+		if instrument != "drum" && instrument != "bass" {
+			return "", "", errors.New("clip audition instrument must be drum or bass")
+		}
+	case "scene":
+		if instrument != "scene" {
+			return "", "", errors.New("scene audition instrument must be scene")
+		}
+	}
+	if variation != "" {
+		if err := validateTasteInstrumentVariation(instrument, variation); err != nil {
+			return "", "", err
+		}
+	}
+	return instrument, variation, nil
+}
+
+func auditionPreferencePrompt(targetType, instrument, variation string) string {
+	if instrument != "" && variation != "" {
+		return fmt.Sprintf(
+			"Which was closer to your ideal: source or variation? Record with ableton_record_variation_preference using instrument=%s variation=%s.",
+			instrument, variation,
+		)
+	}
+	if instrument != "" {
+		candidates := strings.Join(tasteVariationsFor(instrument), ", ")
+		return fmt.Sprintf(
+			"Which was closer to your ideal: source or variation? Record with ableton_record_variation_preference using instrument=%s and the variation you compared (%s).",
+			instrument, candidates,
+		)
+	}
+	if targetType == "scene" {
+		return "Which was closer to your ideal: source or variation? Record with ableton_record_variation_preference using instrument=scene and variation=lift or pullback."
+	}
+	return "Which was closer to your ideal: source or variation? Record with ableton_record_variation_preference using instrument=drum or bass and the variation you compared (e.g. groove, density, octave_up)."
 }
 
 func fireAuditionTarget(client auditionClient, targetType string, trackIndex *int, index int) error {
