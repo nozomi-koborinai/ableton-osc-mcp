@@ -3,6 +3,7 @@ package tools
 import (
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -163,6 +164,50 @@ func TestCreateSceneEnergyVariationRemovesDuplicateOnFailure(t *testing.T) {
 	}
 	if !hasSceneVariationSend(client.calls, "/live/song/delete_scene") {
 		t.Error("expected duplicated scene cleanup")
+	}
+}
+
+func TestCreateSceneEnergyVariationKeepsSceneWhenFireFails(t *testing.T) {
+	t.Parallel()
+
+	client := &sceneVariationStub{
+		queries: map[string][][]interface{}{
+			"/live/song/get/num_scenes": {
+				{int32(2)},
+				{int32(3)},
+			},
+			"/live/clip_slot/get/has_clip": {
+				{int32(0), int32(0), true},
+			},
+			"/live/clip/get/notes": {
+				{
+					int32(0), int32(0),
+					int32(36), float32(0), float32(0.25), int32(100), false,
+				},
+			},
+		},
+		queryAt: map[string]int{},
+		sendErr: map[string]error{
+			"/live/scene/fire": errors.New("fire failed"),
+		},
+	}
+	_, err := createSceneEnergyVariation(client, CreateSceneEnergyVariationInput{
+		SourceSceneIndex: 0,
+		TrackIndices:     []int{0},
+		Variation:        "lift",
+		Fire:             true,
+	})
+	if err == nil {
+		t.Fatal("createSceneEnergyVariation() error = nil, want fire error")
+	}
+	if !hasSceneVariationSend(client.calls, "/live/song/duplicate_scene") {
+		t.Error("expected scene duplication before fire")
+	}
+	if hasSceneVariationSend(client.calls, "/live/song/delete_scene") {
+		t.Error("fire failure must not delete a completed variation scene")
+	}
+	if !strings.Contains(err.Error(), "fire target scene 1 failed") || !strings.Contains(err.Error(), "variation scene kept") {
+		t.Errorf("error = %q", err)
 	}
 }
 
