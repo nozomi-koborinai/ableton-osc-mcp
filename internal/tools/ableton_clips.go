@@ -151,55 +151,10 @@ func NewAbletonGetClipNotes(g *genkit.Genkit, client *abletonosc.Client) ai.Tool
 			if err != nil {
 				return ClipNotesOutput{}, err
 			}
-			if err := ensureResponseLen(res, 2); err != nil {
-				return ClipNotesOutput{}, err
-			}
-			trackIndex, err := abletonosc.AsInt(res[0])
+			trackIndex, clipIndex, notes, err := parseClipNotesResponse(res)
 			if err != nil {
 				return ClipNotesOutput{}, err
 			}
-			clipIndex, err := abletonosc.AsInt(res[1])
-			if err != nil {
-				return ClipNotesOutput{}, err
-			}
-
-			payload := res[2:]
-			if len(payload)%5 != 0 {
-				return ClipNotesOutput{}, fmt.Errorf("unexpected notes payload: %v", payload)
-			}
-
-			notes := make([]MidiNote, 0, len(payload)/5)
-			for i := 0; i < len(payload); i += 5 {
-				pitch, err := abletonosc.AsInt(payload[i])
-				if err != nil {
-					return ClipNotesOutput{}, err
-				}
-				startTime, err := abletonosc.AsFloat64(payload[i+1])
-				if err != nil {
-					return ClipNotesOutput{}, err
-				}
-				duration, err := abletonosc.AsFloat64(payload[i+2])
-				if err != nil {
-					return ClipNotesOutput{}, err
-				}
-				velocity, err := abletonosc.AsInt(payload[i+3])
-				if err != nil {
-					return ClipNotesOutput{}, err
-				}
-				mute, err := abletonosc.AsBool(payload[i+4])
-				if err != nil {
-					return ClipNotesOutput{}, err
-				}
-				m := mute
-				notes = append(notes, MidiNote{
-					Pitch:     pitch,
-					StartTime: startTime,
-					Duration:  duration,
-					Velocity:  velocity,
-					Mute:      &m,
-				})
-			}
-
 			return ClipNotesOutput{
 				TrackIndex: trackIndex,
 				ClipIndex:  clipIndex,
@@ -207,6 +162,58 @@ func NewAbletonGetClipNotes(g *genkit.Genkit, client *abletonosc.Client) ai.Tool
 			}, nil
 		},
 	)
+}
+
+func parseClipNotesResponse(res []interface{}) (int, int, []MidiNote, error) {
+	if err := ensureResponseLen(res, 2); err != nil {
+		return 0, 0, nil, err
+	}
+	trackIndex, err := abletonosc.AsInt(res[0])
+	if err != nil {
+		return 0, 0, nil, err
+	}
+	clipIndex, err := abletonosc.AsInt(res[1])
+	if err != nil {
+		return 0, 0, nil, err
+	}
+
+	payload := res[2:]
+	if len(payload)%5 != 0 {
+		return 0, 0, nil, fmt.Errorf("unexpected notes payload: %v", payload)
+	}
+
+	notes := make([]MidiNote, 0, len(payload)/5)
+	for i := 0; i < len(payload); i += 5 {
+		pitch, err := abletonosc.AsInt(payload[i])
+		if err != nil {
+			return 0, 0, nil, err
+		}
+		startTime, err := abletonosc.AsFloat64(payload[i+1])
+		if err != nil {
+			return 0, 0, nil, err
+		}
+		duration, err := abletonosc.AsFloat64(payload[i+2])
+		if err != nil {
+			return 0, 0, nil, err
+		}
+		velocity, err := abletonosc.AsInt(payload[i+3])
+		if err != nil {
+			return 0, 0, nil, err
+		}
+		mute, err := abletonosc.AsBool(payload[i+4])
+		if err != nil {
+			return 0, 0, nil, err
+		}
+		m := mute
+		notes = append(notes, MidiNote{
+			Pitch:     pitch,
+			StartTime: startTime,
+			Duration:  duration,
+			Velocity:  velocity,
+			Mute:      &m,
+		})
+	}
+	return trackIndex, clipIndex, notes, nil
 }
 
 func NewAbletonFireClipSlot(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
