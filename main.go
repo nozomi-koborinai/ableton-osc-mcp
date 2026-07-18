@@ -126,6 +126,7 @@ func main() {
 
 		// Recipes
 		tools.NewAbletonSetupDrumTrack(g, ableton),
+		tools.NewAbletonCompareABVariation(g, ableton),
 
 		// A/B comparison feedback
 		tools.NewAbletonRecordVariationPreference(g, tasteStore),
