@@ -29,6 +29,7 @@ type AnalyzeAudioURLOutput struct {
 	KeyConfidence     float64                     `json:"key_confidence,omitempty"`
 	ChordProgression  []audioanalyze.ChordSegment `json:"chord_progression,omitempty"`
 	ChordSummary      string                      `json:"chord_summary,omitempty"`
+	Sections          []audioanalyze.Section      `json:"sections,omitempty"`
 	LengthBarsAtBPM   float64                     `json:"length_bars_at_project_tempo,omitempty"`
 	Note              string                      `json:"note"`
 	NextStep          string                      `json:"next_step"`
@@ -36,7 +37,7 @@ type AnalyzeAudioURLOutput struct {
 
 func NewAbletonAnalyzeAudioURL(g *genkit.Genkit) ai.Tool {
 	return genkit.DefineTool(g, "ableton_analyze_audio_url",
-		"Reference-analyze audio at an http(s) URL (e.g. YouTube) for tempo/length/levels, approximate key/scale and chord progression. Streams a short window through yt-dlp+ffmpeg in memory, saves nothing, and never extracts melodies or notes. Requires yt-dlp and ffmpeg on PATH; you are responsible for your right to access the URL.",
+		"Reference-analyze audio at an http(s) URL (e.g. YouTube) for tempo/length/levels, approximate key/scale, chord progression, and an energy-based section map. Streams the full track through yt-dlp+ffmpeg in memory, saves nothing, and never extracts melodies or notes. Requires yt-dlp and ffmpeg on PATH; you are responsible for your right to access the URL.",
 		func(tc *ai.ToolContext, input AnalyzeAudioURLInput) (AnalyzeAudioURLOutput, error) {
 			projectTempo := 0.0
 			if input.ProjectTempo != nil {
@@ -63,6 +64,7 @@ func NewAbletonAnalyzeAudioURL(g *genkit.Genkit) ai.Tool {
 				KeyConfidence:     got.KeyConfidence,
 				ChordProgression:  got.ChordProgression,
 				ChordSummary:      got.ChordSummary,
+				Sections:          got.Sections,
 				LengthBarsAtBPM:   got.LengthBarsAtBPM,
 				Note:              got.Note,
 				NextStep:          "Use the tempo/key/chord progression as a reference to build your own part. This tool does not import the audio; place only samples you have the right to use.",
