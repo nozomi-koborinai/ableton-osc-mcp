@@ -63,7 +63,7 @@ type auditionSleeper func(time.Duration)
 
 func NewAbletonAuditionAB(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
 	return genkit.DefineTool(g, "ableton_audition_ab",
-		"Ableton Live: audition an A and B clip or scene in alternating bar-length sections synced to song time, then prompt for a preference",
+		"Ableton Live: audition existing A/B clips or scenes on song time and prompt for a preference — prefer ableton_compare_ab_variation when the B variation still needs to be created",
 		func(_ *ai.ToolContext, input AuditionABInput) (AuditionABOutput, error) {
 			return auditionAB(client, input, time.Sleep)
 		},

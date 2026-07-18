@@ -45,7 +45,7 @@ type bassVariationOptions struct {
 
 func NewAbletonCreateBassVariation(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
 	return genkit.DefineTool(g, "ableton_create_bass_variation",
-		"Ableton Live: duplicate a bass MIDI clip into an empty slot and make one A/B variation: octave, staccato, or groove",
+		"Ableton Live: create only a bass A/B variation (octave, staccato, or groove) in an empty slot — prefer ableton_compare_ab_variation when you also want to audition",
 		func(_ *ai.ToolContext, input CreateBassVariationInput) (CreateBassVariationOutput, error) {
 			return createBassVariation(client, input)
 		},
