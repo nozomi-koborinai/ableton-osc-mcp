@@ -44,6 +44,12 @@ func main() {
 	toolList := []ai.Tool{
 		// Song / Transport
 		tools.NewAbletonTest(g, ableton),
+		tools.NewAbletonDiagnose(g, ableton, tools.DiagnoseSettings{
+			Host:       cfg.AbletonHost,
+			Port:       cfg.AbletonPort,
+			ClientPort: cfg.AbletonClientPort,
+			Timeout:    cfg.Timeout,
+		}),
 		tools.NewAbletonGetTempo(g, ableton),
 		tools.NewAbletonSetTempo(g, ableton),
 		tools.NewAbletonPlay(g, ableton),
