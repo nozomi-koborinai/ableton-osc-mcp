@@ -61,7 +61,7 @@ func NewAbletonCaptureMixSnapshot(g *genkit.Genkit, client *abletonosc.Client) a
 
 func NewAbletonApplyMixVariation(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
 	return genkit.DefineTool(g, "ableton_apply_mix_variation",
-		"Ableton Live: apply small track-volume changes for a B mix version and return the A snapshot for restoration",
+		"Ableton Live: mix A/B entry — apply small track-volume changes for B and return the A snapshot (not covered by ableton_compare_ab_variation; restore with ableton_restore_mix_snapshot)",
 		func(_ *ai.ToolContext, input ApplyMixVariationInput) (ApplyMixVariationOutput, error) {
 			return applyMixVariation(client, input)
 		},

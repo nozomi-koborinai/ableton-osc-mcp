@@ -40,7 +40,7 @@ type sceneVariationTrack struct {
 
 func NewAbletonCreateSceneEnergyVariation(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
 	return genkit.DefineTool(g, "ableton_create_scene_energy_variation",
-		"Ableton Live: duplicate a scene and create an A/B energy lift or pullback by changing selected MIDI-track velocities",
+		"Ableton Live: create only a scene energy A/B variation (lift or pullback) — prefer ableton_compare_ab_variation when you also want to audition",
 		func(_ *ai.ToolContext, input CreateSceneEnergyVariationInput) (CreateSceneEnergyVariationOutput, error) {
 			return createSceneEnergyVariation(client, input)
 		},

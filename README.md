@@ -17,18 +17,12 @@ This enables AI assistants (Claude, Cursor, etc.) to interact with Ableton Live 
 - Load Drum Racks / presets from Live's Browser (with the included AbletonOSC patch)
 - Browse Live Browser folders by path and load items onto tracks
 - Set up a drum track with kit + clip + pattern in one recipe
-- Compare a drum, bass, or scene A/B variation in one create→audition recipe
+- Run drum / bass / scene A/B comparisons through one create→audition recipe, then save taste locally
+- Compare mix balance with snapshots you can restore
 - Humanize MIDI clips with microtiming, velocity variation, and swing
-- Create safe A/B drum variations that change only groove, density, or fills
-- Create safe A/B bass variations that change only octave, note length, or groove
-- Save A/B choices locally (drum, bass, scene, mix) to build a taste profile and guide the next comparison
-- Compare small mix-balance hypotheses, then restore the original volume snapshot
-- Duplicate a scene and compare an energy lift or pullback on selected MIDI tracks
-- Audition A/B clips or scenes automatically on Live song time (1-bar quantization)
 - Autogain tracks toward a target meter level while audio is playing
 - Diagnose AbletonOSC connection and browser/master patch readiness
-- Fire clip slots
-- Send raw OSC messages for advanced control
+- Fire clip slots and send raw OSC for advanced control
 
 ## Browser loading (AbletonOSC patch)
 
@@ -225,6 +219,24 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 > **Note**: Replace `/opt/homebrew/bin/ableton-osc-mcp` with your actual binary path if different.
 
+## A/B comparison workflow
+
+For the usual drum, bass, or scene listen-and-choose loop, start here:
+
+1. Optional: `ableton_get_taste_profile` — see what to try next
+2. `ableton_compare_ab_variation` — create one-axis B, audition A→B, get a preference prompt
+3. Ask the listener which they prefer, then `ableton_record_variation_preference`
+
+Keep the lower-level tools for special cases:
+
+| When you need… | Use |
+|---|---|
+| Create B without auditioning yet | `ableton_create_drum_variation` / `ableton_create_bass_variation` / `ableton_create_scene_energy_variation` |
+| Audition clips/scenes that already exist | `ableton_audition_ab` |
+| Mix balance A/B (volume deltas + restore) | `ableton_apply_mix_variation` → listen → record preference → `ableton_restore_mix_snapshot` |
+
+Mix is intentionally outside `ableton_compare_ab_variation` because it uses snapshots, not clip/scene slots.
+
 ## Available Tools
 
 | Tool | Description |
@@ -249,17 +261,17 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `ableton_create_clip` | Create a clip in a slot |
 | `ableton_get_clip_notes` / `ableton_add_midi_notes` / `ableton_clear_clip_notes` | MIDI notes |
 | `ableton_humanize_clip` | Add microtiming, velocity variation, and optional swing to clip notes |
-| `ableton_create_drum_variation` | Duplicate a drum clip into an empty slot and change groove, density, or fill for A/B comparison (rejects no-op changes) |
-| `ableton_create_bass_variation` | Duplicate a bass clip into an empty slot and change octave, note length, or groove for A/B comparison |
-| `ableton_audition_ab` | Alternate A/B clips or scenes for N bars, waiting on Live song time with 1-bar launch quantization |
-| `ableton_compare_ab_variation` | Create one drum/bass/scene variation, audition A→B, and return a preference prompt |
+| `ableton_compare_ab_variation` | Preferred A/B entry: create one drum/bass/scene variation, audition A→B, return a preference prompt |
+| `ableton_create_drum_variation` | Create-only drum A/B variation (groove / density / fill); use when you do not want audition yet |
+| `ableton_create_bass_variation` | Create-only bass A/B variation (octave / staccato / groove) |
+| `ableton_create_scene_energy_variation` | Create-only scene energy variation (lift / pullback); keeps B if fire fails |
+| `ableton_audition_ab` | Audition existing A/B clips or scenes on Live song time |
 | `ableton_record_variation_preference` | Save whether the source or variation matched your taste (drum, bass, scene, or mix) |
-| `ableton_get_taste_profile` | Summarize saved A/B choices and suggest the next comparison across all families |
+| `ableton_get_taste_profile` | Summarize saved A/B choices and suggest the next comparison |
 | `ableton_fire_clip_slot` / `ableton_stop_clip` | Fire/stop a clip |
 | `ableton_duplicate_clip_to` | Duplicate clip to another slot |
 | `ableton_set_clip_name` | Rename a clip |
 | `ableton_fire_scene` | Fire a scene |
-| `ableton_create_scene_energy_variation` | Duplicate a scene, then make a MIDI velocity lift or pullback for A/B comparison (keeps B if fire fails) |
 | `ableton_get_device_parameters` / `ableton_set_device_parameter` | Device parameters |
 | `ableton_find_browser_item` | Search Live Browser (requires patch) |
 | `ableton_list_browser_folder` | List Browser roots or folder children (requires patch) |
@@ -268,8 +280,8 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `ableton_load_device_preset` | Hotswap a preset onto a device |
 | `ableton_get_track_meter` | Track output meter levels |
 | `ableton_autogain_tracks` | Iteratively adjust track volumes toward a target meter level |
-| `ableton_capture_mix_snapshot` / `ableton_restore_mix_snapshot` | Capture and restore track volumes for safe A/B mix comparison |
-| `ableton_apply_mix_variation` | Apply small B-version volume changes and return the A snapshot |
+| `ableton_apply_mix_variation` | Mix A/B entry: apply small B volume changes and return the A snapshot |
+| `ableton_capture_mix_snapshot` / `ableton_restore_mix_snapshot` | Capture or restore track volumes for mix A/B |
 | `ableton_get_master_meter` / `ableton_get_master_volume` / `ableton_set_master_volume` | Master meter/volume (requires master patch) |
 | `ableton_get_master_devices` / `ableton_get_master_device_parameters` / `ableton_set_master_device_parameter` | Master devices (requires master patch) |
 | `ableton_load_on_master` | Load Browser item onto master (requires browser+master patch) |
@@ -285,13 +297,11 @@ Once configured, you can ask your AI assistant:
 - "Set the tempo to 140 BPM"
 - "Create a MIDI track, load Street Kit, and add a 4-bar clip"
 - "Set up a Street Kit drum track with a four-on-floor pattern"
+- "Compare a drum groove variation of clip 0 into empty slot 1, then ask which I prefer"
+- "Check my taste profile and run the least-tried bass comparison next"
+- "I prefer the variation; save that and suggest what to compare next"
+- "Create a mix B with the bass 0.05 lower, let me listen, then restore A"
 - "Humanize the drum clip with a bit of swing"
-- "Create a groove variation of clip 0 in empty slot 1 so I can compare them"
-- "Create an octave-up variation of the bass clip in empty slot 1"
-- "I prefer the drum groove variation; save that choice and suggest what to compare next"
-- "Audition drum clips 0 and 1 on track 0 for two bars each, twice"
-- "Create a mix B version with the bass 0.05 lower; keep the returned snapshot so I can compare and restore A"
-- "Create an energy lift of scene 0 for the drum and bass MIDI tracks so I can compare the sections"
 - "Autogain the drum and bass tracks while the beat is playing"
 - "Find drum kits named Street in the browser"
 - "List the Drums browser folder, then load Street Kit onto track 0"

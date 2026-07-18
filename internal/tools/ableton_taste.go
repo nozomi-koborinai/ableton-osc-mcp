@@ -51,7 +51,7 @@ var tasteInstrumentOrder = []string{"bass", "drum", "mix", "scene"}
 
 func NewAbletonRecordVariationPreference(g *genkit.Genkit, store tasteStore) ai.Tool {
 	return genkit.DefineTool(g, "ableton_record_variation_preference",
-		"Ableton Live: record whether an A/B drum, bass, scene, or mix variation matched your taste",
+		"Ableton Live: after an A/B listen, record whether source or variation matched your taste (drum, bass, scene, or mix) — usually follows ableton_compare_ab_variation or a mix compare",
 		func(_ *ai.ToolContext, input RecordVariationPreferenceInput) (TasteProfileOutput, error) {
 			preference, err := validateTastePreference(input)
 			if err != nil {
@@ -75,7 +75,7 @@ func NewAbletonRecordVariationPreference(g *genkit.Genkit, store tasteStore) ai.
 
 func NewAbletonGetTasteProfile(g *genkit.Genkit, store tasteStore) ai.Tool {
 	return genkit.DefineTool(g, "ableton_get_taste_profile",
-		"Ableton Live: summarize saved A/B variation preferences and suggest the next comparison",
+		"Ableton Live: summarize saved A/B preferences and suggest the next comparison — use before choosing what to run with ableton_compare_ab_variation",
 		func(_ *ai.ToolContext, _ EmptyInput) (TasteProfileOutput, error) {
 			profile, err := store.Load()
 			if err != nil {

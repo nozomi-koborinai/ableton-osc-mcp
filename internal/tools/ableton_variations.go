@@ -58,7 +58,7 @@ type variationClient interface {
 
 func NewAbletonCreateDrumVariation(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
 	return genkit.DefineTool(g, "ableton_create_drum_variation",
-		"Ableton Live: duplicate a drum clip into an empty slot and make one A/B variation: groove, density, or fill",
+		"Ableton Live: create only a drum A/B variation (groove, density, or fill) in an empty slot — prefer ableton_compare_ab_variation when you also want to audition",
 		func(_ *ai.ToolContext, input CreateDrumVariationInput) (CreateDrumVariationOutput, error) {
 			return createDrumVariation(client, input)
 		},
