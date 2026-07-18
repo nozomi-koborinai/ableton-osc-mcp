@@ -104,6 +104,9 @@ func main() {
 		tools.NewAbletonSetSessionRecord(g, ableton),
 		tools.NewAbletonBounceSessionPass(g, ableton),
 
+		// Recipes
+		tools.NewAbletonSetupDrumTrack(g, ableton),
+
 		// Raw OSC
 		tools.NewAbletonOscSend(g, ableton),
 	}
