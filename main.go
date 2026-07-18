@@ -90,6 +90,7 @@ func main() {
 		tools.NewAbletonSetClipName(g, ableton),
 		tools.NewAbletonMatchClipTempo(g, ableton),
 		tools.NewAbletonAnalyzeLocalAudio(g),
+		tools.NewAbletonAnalyzeAudioURL(g),
 		tools.NewAbletonCreateDrumVariation(g, ableton),
 		tools.NewAbletonCreateBassVariation(g, ableton),
 		tools.NewAbletonAuditionAB(g, ableton),

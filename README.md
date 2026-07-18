@@ -21,7 +21,7 @@ This enables AI assistants (Claude, Cursor, etc.) to interact with Ableton Live 
 - Compare mix balance with snapshots you can restore
 - Humanize MIDI clips with microtiming, velocity variation, and swing
 - Match an audio clip to the project tempo with Warp (e.g. after loading a sample)
-- Analyze a local `.wav` for duration, levels, and estimated BPM (no URL downloads)
+- Analyze a local `.wav`, or reference-analyze an `http(s)`/YouTube URL, for duration, levels, and estimated BPM (URL streams in memory and is never saved)
 - Autogain tracks toward a target meter level while audio is playing
 - Diagnose AbletonOSC connection and browser/master patch readiness
 - Fire clip slots and send raw OSC for advanced control
@@ -239,17 +239,22 @@ Keep the lower-level tools for special cases:
 
 Mix is intentionally outside `ableton_compare_ab_variation` because it uses snapshots, not clip/scene slots.
 
-## Local audio analysis
+## Audio analysis
 
-`ableton_analyze_local_audio` inspects a **local `.wav` path you already have**.
+Two entry points estimate duration, peak/RMS level, onset density, and BPM to
+help you place or warp a sample. Both are **reference analysis only**: they
+extract factual metadata and never transcribe lyrics or extract note-for-note
+MIDI of a performance.
 
-It estimates duration, peak/RMS level, onset density, and BPM for placement/warping decisions. It intentionally does **not**:
+- `ableton_analyze_local_audio` — inspects a **local `.wav` path you already have**. No network access.
+- `ableton_analyze_audio_url` — reference-analyzes an `http(s)` URL (e.g. YouTube). It streams at most 60s through `yt-dlp` + `ffmpeg` **in memory, analyzes it, and discards it** — nothing is written to disk.
 
-- accept `http(s)` / YouTube links
-- download remote audio
-- transcribe lyrics or extract note-for-note MIDI of a performance
+`ableton_analyze_audio_url` requires `yt-dlp` and `ffmpeg` on `PATH`; this server
+never downloads on its own. Accessing some sites may violate their terms of
+service, and you are responsible for your right to use any source you analyze.
 
-Use it with files you have rights to use, then load into Live and call `ableton_match_clip_tempo` if needed.
+Use results with files you have rights to use, then load into Live and call
+`ableton_match_clip_tempo` if needed.
 
 ## Available Tools
 
@@ -277,6 +282,7 @@ Use it with files you have rights to use, then load into Live and call `ableton_
 | `ableton_humanize_clip` | Add microtiming, velocity variation, and optional swing to clip notes |
 | `ableton_match_clip_tempo` | Enable Warp on an audio clip so it follows the project tempo (`beats` or `complex`) |
 | `ableton_analyze_local_audio` | Analyze a local `.wav` (duration, levels, estimated BPM). Rejects URLs; no melody/note extraction |
+| `ableton_analyze_audio_url` | Reference-analyze an `http(s)`/YouTube URL (tempo/length/levels). Streams via yt-dlp+ffmpeg in memory, saves nothing; requires yt-dlp+ffmpeg |
 | `ableton_compare_ab_variation` | Preferred A/B entry: create one drum/bass/scene variation, audition A→B, return a preference prompt |
 | `ableton_create_drum_variation` | Create-only drum A/B variation (groove / density / fill); use when you do not want audition yet |
 | `ableton_create_bass_variation` | Create-only bass A/B variation (octave / staccato / groove) |
