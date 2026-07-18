@@ -12,6 +12,7 @@ Adds Live Browser `load_item()` support and master-track mix helpers so MCP tool
 | `/live/browser/list_folder` | _(none)_ or `root_name`, `*path_parts` | List roots, or children under a folder |
 | `/live/browser/load_at_path` | `track_index` (`-1`=master), `device_index`, `root_name`, `*path_parts`, `item_name` | Load by exact path |
 | `/live/browser/debug` | _(none)_ | Dump browser roots (debug) |
+| `/live/clip_slot/create_audio_clip` | `track_index`, `clip_index`, `absolute_path` | Create a session audio clip from a local file (Live 12.0.5+) |
 | `/live/master/get/volume` | — | Master volume |
 | `/live/master/set/volume` | `volume` | Set master volume |
 | `/live/master/get/output_meter_level` / `left` / `right` | — | Master meters |

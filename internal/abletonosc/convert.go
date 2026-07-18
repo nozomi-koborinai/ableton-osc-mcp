@@ -54,3 +54,12 @@ func AsBool(v interface{}) (bool, error) {
 		return false, fmt.Errorf("cannot convert %T to bool", v)
 	}
 }
+
+func AsString(v interface{}) (string, error) {
+	switch t := v.(type) {
+	case string:
+		return t, nil
+	default:
+		return "", fmt.Errorf("cannot convert %T to string", v)
+	}
+}

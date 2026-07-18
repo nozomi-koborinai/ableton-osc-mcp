@@ -233,12 +233,47 @@ class BrowserHandler(AbletonOSCHandler):
             )
             return (track_index, device_index, "loaded", item.name)
 
+        def clip_slot_create_audio_clip_handler(params: Tuple[Any]):
+            """Params: track_index, clip_index, absolute_audio_path.
+
+            Requires Live 12.0.5+ (ClipSlot.create_audio_clip). Used to drop
+            local samples (e.g. synced Splice downloads) into session slots.
+            """
+            if len(params) < 3:
+                return ("error", "missing_args")
+            track_index = int(params[0])
+            clip_index = int(params[1])
+            path = str(params[2])
+            if track_index < 0 or track_index >= len(self.song.tracks):
+                return (track_index, clip_index, "invalid_track_index")
+            track = self.song.tracks[track_index]
+            if track.has_midi_input:
+                return (track_index, clip_index, "not_audio_track")
+            if clip_index < 0 or clip_index >= len(track.clip_slots):
+                return (track_index, clip_index, "invalid_clip_index")
+            slot = track.clip_slots[clip_index]
+            if not hasattr(slot, "create_audio_clip"):
+                return (
+                    track_index,
+                    clip_index,
+                    "unsupported",
+                    "create_audio_clip requires Ableton Live 12.0.5+",
+                )
+            try:
+                slot.create_audio_clip(path)
+            except Exception as exc:
+                return (track_index, clip_index, "error", str(exc))
+            return (track_index, clip_index, "created", path)
+
         self.osc_server.add_handler("/live/browser/find", browser_find_handler)
         self.osc_server.add_handler("/live/browser/debug", browser_debug_handler)
         self.osc_server.add_handler("/live/browser/list_folder", browser_list_folder_handler)
         self.osc_server.add_handler("/live/browser/load_at_path", browser_load_at_path_handler)
         self.osc_server.add_handler("/live/track/load/browser_item", track_load_browser_item_handler)
         self.osc_server.add_handler("/live/device/load/preset", device_load_preset_handler)
+        self.osc_server.add_handler(
+            "/live/clip_slot/create_audio_clip", clip_slot_create_audio_clip_handler
+        )
 
         # Master-track helpers (also registered by MasterHandler; kept here so hot-reload
         # of browser.py always restores them even if master.py fails to import).

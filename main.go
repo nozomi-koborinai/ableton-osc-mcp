@@ -105,6 +105,9 @@ func main() {
 		tools.NewAbletonLoadBrowserItem(g, ableton),
 		tools.NewAbletonLoadBrowserPath(g, ableton),
 		tools.NewAbletonLoadDevicePreset(g, ableton),
+		tools.NewAbletonGetSpliceLibrary(g, tools.SpliceLibrarySettings{ConfiguredPath: cfg.SplicePath}),
+		tools.NewAbletonSearchSpliceSamples(g, tools.SpliceLibrarySettings{ConfiguredPath: cfg.SplicePath}),
+		tools.NewAbletonLoadSpliceSample(g, ableton, tools.SpliceLibrarySettings{ConfiguredPath: cfg.SplicePath}),
 
 		// Mix bus / Master
 		tools.NewAbletonGetTrackMeter(g, ableton),
