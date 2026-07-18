@@ -30,6 +30,9 @@ type AnalyzeLocalAudioOutput struct {
 	ChordProgression  []audioanalyze.ChordSegment `json:"chord_progression,omitempty"`
 	ChordSummary      string                      `json:"chord_summary,omitempty"`
 	Sections          []audioanalyze.Section      `json:"sections,omitempty"`
+	BrightnessHz      float64                     `json:"brightness_hz,omitempty"`
+	CrestFactorDB     float64                     `json:"crest_factor_db,omitempty"`
+	StereoWidth       float64                     `json:"stereo_width"`
 	LengthBarsAtBPM   float64                     `json:"length_bars_at_project_tempo,omitempty"`
 	Note              string                      `json:"note"`
 	NextStep          string                      `json:"next_step"`
@@ -37,7 +40,7 @@ type AnalyzeLocalAudioOutput struct {
 
 func NewAbletonAnalyzeLocalAudio(g *genkit.Genkit) ai.Tool {
 	return genkit.DefineTool(g, "ableton_analyze_local_audio",
-		"Analyze a local .wav file for sampling placement (duration, levels, estimated BPM, approximate key/scale, chord progression, and an energy-based section map). Does not download URLs or extract melodies/notes.",
+		"Analyze a local .wav file for sampling placement (duration, levels, estimated BPM, approximate key/scale, chord progression, an energy-based section map, and texture indicators: brightness/dynamics/stereo width). Does not download URLs or extract melodies/notes.",
 		func(_ *ai.ToolContext, input AnalyzeLocalAudioInput) (AnalyzeLocalAudioOutput, error) {
 			return analyzeLocalAudio(input)
 		},
@@ -71,6 +74,9 @@ func analyzeLocalAudio(input AnalyzeLocalAudioInput) (AnalyzeLocalAudioOutput, e
 		ChordProgression:  got.ChordProgression,
 		ChordSummary:      got.ChordSummary,
 		Sections:          got.Sections,
+		BrightnessHz:      got.BrightnessHz,
+		CrestFactorDB:     got.CrestFactorDB,
+		StereoWidth:       got.StereoWidth,
 		LengthBarsAtBPM:   got.LengthBarsAtBPM,
 		Note:              got.Note,
 		NextStep:          "If you load this sample into Live, use ableton_match_clip_tempo with the suggested_warp_mode so it follows the project tempo.",
