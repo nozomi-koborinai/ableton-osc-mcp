@@ -47,14 +47,11 @@ func TestAnalyzeURLRejectsBadURL(t *testing.T) {
 	}
 }
 
-func TestFfmpegArgsBounded(t *testing.T) {
+func TestFfmpegArgsStreamMono(t *testing.T) {
 	t.Parallel()
 
-	args := ffmpegArgs(60)
+	args := ffmpegArgs()
 	joined := strings.Join(args, " ")
-	if !strings.Contains(joined, "-t 60") {
-		t.Errorf("ffmpeg args missing duration cap: %v", args)
-	}
 	if !strings.Contains(joined, "-ac 1") || !strings.Contains(joined, "-ar 44100") {
 		t.Errorf("ffmpeg args missing mono/44.1k downmix: %v", args)
 	}

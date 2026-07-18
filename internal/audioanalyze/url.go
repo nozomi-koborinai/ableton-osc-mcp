@@ -8,17 +8,15 @@ import (
 	"io"
 	"net/url"
 	"os/exec"
-	"strconv"
 	"strings"
 	"time"
 )
 
 const (
-	// urlAnalyzeSeconds bounds how much audio is streamed and decoded. We only
-	// need a short window to estimate tempo/levels, and keeping it short
-	// reinforces that this is reference analysis, not a copy of the work.
-	urlAnalyzeSeconds = 60
-	urlAnalyzeTimeout = 90 * time.Second
+	// urlAnalyzeTimeout bounds the whole fetch+decode. The full track is
+	// streamed (bounded by maxFileBytes), analyzed in memory, and discarded;
+	// nothing is written to disk.
+	urlAnalyzeTimeout = 240 * time.Second
 )
 
 // AnalyzeURL streams a short window of audio referenced by a URL through
@@ -46,7 +44,7 @@ func AnalyzeURL(ctx context.Context, rawURL string, projectTempo float64) (Resul
 	defer cancel()
 
 	dl := exec.CommandContext(ctx, ytdlp, ytDlpArgs(clean)...)
-	ff := exec.CommandContext(ctx, ffmpeg, ffmpegArgs(urlAnalyzeSeconds)...)
+	ff := exec.CommandContext(ctx, ffmpeg, ffmpegArgs()...)
 
 	dlOut, err := dl.StdoutPipe()
 	if err != nil {
@@ -71,7 +69,10 @@ func AnalyzeURL(ctx context.Context, rawURL string, projectTempo float64) (Resul
 
 	wav, readErr := io.ReadAll(io.LimitReader(ffOut, maxFileBytes+1))
 
-	// yt-dlp finishing first (or failing) closes the pipe so ffmpeg exits.
+	// Stop both processes once we have enough audio (e.g. hit the byte cap on a
+	// very long source), then reap them. yt-dlp finishing first also closes the
+	// pipe so ffmpeg exits on its own in the common case.
+	cancel()
 	dlWaitErr := dl.Wait()
 	ffWaitErr := ff.Wait()
 
@@ -92,7 +93,7 @@ func AnalyzeURL(ctx context.Context, rawURL string, projectTempo float64) (Resul
 		return Result{}, err
 	}
 	out.Path = clean
-	out.Note = fmt.Sprintf("URL reference analysis: streamed at most %ds, analyzed in memory, and discarded. Nothing was saved and no melody/notes were extracted. You are responsible for your right to use the source.", urlAnalyzeSeconds)
+	out.Note = "URL reference analysis: streamed in memory, analyzed, and discarded. Nothing was saved and no melody/notes were extracted. You are responsible for your right to use the source."
 	return out, nil
 }
 
@@ -108,8 +109,9 @@ func ytDlpArgs(u string) []string {
 	}
 }
 
-// ffmpegArgs decodes stdin to a mono 44.1kHz WAV stream, capped to seconds.
-func ffmpegArgs(seconds int) []string {
+// ffmpegArgs decodes stdin to a full-length mono 44.1kHz WAV stream. Overall
+// size is bounded downstream by maxFileBytes rather than a fixed duration.
+func ffmpegArgs() []string {
 	return []string{
 		"-hide_banner",
 		"-loglevel", "error",
@@ -117,7 +119,6 @@ func ffmpegArgs(seconds int) []string {
 		"-vn",
 		"-ac", "1",
 		"-ar", "44100",
-		"-t", strconv.Itoa(seconds),
 		"-f", "wav",
 		"pipe:1",
 	}
