@@ -16,6 +16,7 @@ This enables AI assistants (Claude, Cursor, etc.) to interact with Ableton Live 
 - List devices on a track
 - Load Drum Racks / presets from Live's Browser (with the included AbletonOSC patch)
 - Browse Live Browser folders by path and load items onto tracks
+- Search the local synced Splice library and load samples onto audio tracks (Live 12.0.5+)
 - Set up a drum track with kit + clip + pattern in one recipe
 - Run drum / bass / scene A/B comparisons through one create→audition recipe, then save taste locally
 - Compare mix balance with snapshots you can restore
@@ -34,6 +35,7 @@ This repo ships a small Remote Script patch under [`remote-script/`](remote-scri
 - `/live/browser/load_at_path`
 - `/live/track/load/browser_item`
 - `/live/device/load/preset`
+- `/live/clip_slot/create_audio_clip` (local audio file → session slot; Live 12.0.5+)
 
 Install steps: see [remote-script/README.md](remote-script/README.md).
 After applying the patch, **restart Ableton Live** (a full restart is required the first time; `/live/api/reload` alone is not enough).
@@ -278,6 +280,9 @@ Mix is intentionally outside `ableton_compare_ab_variation` because it uses snap
 | `ableton_load_browser_item` | Load Drum Rack / instrument onto a track by name |
 | `ableton_load_browser_path` | Load Browser item onto a track by exact path (requires patch) |
 | `ableton_load_device_preset` | Hotswap a preset onto a device |
+| `ableton_get_splice_library` | Locate the local Splice content folder (synced downloads only) |
+| `ableton_search_splice_samples` | Search audio files under the local Splice library |
+| `ableton_load_splice_sample` | Load a local Splice audio file into an empty audio-track clip slot (Live 12.0.5+, patch) |
 | `ableton_get_track_meter` | Track output meter levels |
 | `ableton_autogain_tracks` | Iteratively adjust track volumes toward a target meter level |
 | `ableton_apply_mix_variation` | Mix A/B entry: apply small B volume changes and return the A snapshot |
@@ -303,6 +308,7 @@ Once configured, you can ask your AI assistant:
 - "Create a mix B with the bass 0.05 lower, let me listen, then restore A"
 - "Humanize the drum clip with a bit of swing"
 - "Autogain the drum and bass tracks while the beat is playing"
+- "Search my local Splice library for a punchy kick and load one onto an audio track"
 - "Find drum kits named Street in the browser"
 - "List the Drums browser folder, then load Street Kit onto track 0"
 - "Add a kick drum pattern on beats 1, 2, 3, 4"
@@ -342,8 +348,20 @@ In most cases, the default settings work fine. Change these only if:
 | `ABLETON_OSC_CLIENT_PORT` | `11001` | Port for receiving replies |
 | `ABLETON_OSC_TIMEOUT_MS` | `500` | Query timeout in milliseconds |
 | `ABLETON_OSC_TASTE_PROFILE_PATH` | OS user config directory / `ableton-osc-mcp/taste-profile.json` | Local path for saved A/B preferences |
+| `ABLETON_OSC_SPLICE_PATH` | _(auto: `~/Splice` or `~/Documents/Splice`)_ | Local Splice content folder for sample search/load |
 
 </details>
+
+## Splice samples (local library)
+
+This does **not** call the Splice cloud API or download new sounds. It uses samples already synced by the Splice desktop app.
+
+1. Sync/download sounds in the Splice app
+2. Optional: set `ABLETON_OSC_SPLICE_PATH` if auto-detect misses your folder
+3. Re-copy `remote-script/abletonosc/browser.py` into AbletonOSC (adds `/live/clip_slot/create_audio_clip`) and restart Live
+4. Use `ableton_search_splice_samples` → `ableton_load_splice_sample` on an **audio** track empty slot
+
+Loading into a clip slot needs **Ableton Live 12.0.5+** (`ClipSlot.create_audio_clip`).
 
 ## Contributing
 

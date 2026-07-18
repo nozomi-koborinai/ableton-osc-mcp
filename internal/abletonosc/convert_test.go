@@ -63,6 +63,16 @@ func TestAsInt(t *testing.T) {
 	}
 }
 
+func TestAsString(t *testing.T) {
+	got, err := AsString("hello")
+	if err != nil || got != "hello" {
+		t.Fatalf("AsString(string) = %q, %v", got, err)
+	}
+	if _, err := AsString(1); err == nil {
+		t.Fatal("AsString(int) should fail")
+	}
+}
+
 func TestAsBool(t *testing.T) {
 	tests := []struct {
 		name    string

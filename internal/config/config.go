@@ -22,6 +22,7 @@ type Config struct {
 	AbletonClientPort int
 	Timeout           time.Duration
 	TasteProfilePath  string
+	SplicePath        string // optional; empty means auto-detect common Splice folders
 }
 
 // Load reads configuration from environment variables with defaults.
@@ -36,6 +37,7 @@ func Load() Config {
 		AbletonClientPort: envInt("ABLETON_OSC_CLIENT_PORT", defaultAbletonClientPort),
 		Timeout:           envDurationMs("ABLETON_OSC_TIMEOUT_MS", defaultTimeoutMs),
 		TasteProfilePath:  envString("ABLETON_OSC_TASTE_PROFILE_PATH", defaultTasteProfilePath()),
+		SplicePath:        strings.TrimSpace(os.Getenv("ABLETON_OSC_SPLICE_PATH")),
 	}
 }
 
