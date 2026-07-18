@@ -37,6 +37,7 @@ type Result struct {
 	KeyConfidence     float64        `json:"key_confidence,omitempty"`
 	ChordProgression  []ChordSegment `json:"chord_progression,omitempty"`
 	ChordSummary      string         `json:"chord_summary,omitempty"`
+	Sections          []Section      `json:"sections,omitempty"`
 	LengthBarsAtBPM   float64        `json:"length_bars_at_project_tempo,omitempty"`
 	Note              string         `json:"note"`
 }
@@ -122,6 +123,11 @@ func analyzeWAVStream(r io.Reader, projectTempo float64) (Result, error) {
 	if chords, summary, ok := estimateChords(analyze, sampleRate); ok {
 		out.ChordProgression = chords
 		out.ChordSummary = summary
+	}
+	// Structure uses the full decoded audio (URL sources are already capped at
+	// fetch time), so local files get whole-track sections.
+	if sections, ok := estimateSections(mono, sampleRate); ok {
+		out.Sections = sections
 	}
 	if projectTempo > 0 && duration > 0 {
 		beats := duration * (projectTempo / 60)
