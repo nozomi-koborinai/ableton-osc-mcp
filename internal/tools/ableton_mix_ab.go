@@ -121,8 +121,8 @@ func applyMixVariation(client mixABClient, input ApplyMixVariationInput) (ApplyM
 		return ApplyMixVariationOutput{}, err
 	}
 	return ApplyMixVariationOutput{
-		Before: before,
-		After:  MixSnapshotOutput{Tracks: afterTracks},
+		Before:           before,
+		After:            MixSnapshotOutput{Tracks: afterTracks},
 		PreferencePrompt: "After comparing A/B, record with ableton_record_variation_preference using instrument=mix variation=volume, then restore A with ableton_restore_mix_snapshot.",
 	}, nil
 }
