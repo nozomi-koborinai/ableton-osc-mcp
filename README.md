@@ -17,6 +17,7 @@ This enables AI assistants (Claude, Cursor, etc.) to interact with Ableton Live 
 - Load Drum Racks / presets from Live's Browser (with the included AbletonOSC patch)
 - Browse Live Browser folders by path and load items onto tracks
 - Set up a drum track with kit + clip + pattern in one recipe
+- Diagnose AbletonOSC connection and browser/master patch readiness
 - Fire clip slots
 - Send raw OSC messages for advanced control
 
@@ -220,6 +221,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | Tool | Description |
 |------|-------------|
 | `ableton_test` | Test connection to AbletonOSC |
+| `ableton_diagnose` | Diagnose AbletonOSC connection and browser/master patch availability |
 | `ableton_get_tempo` / `ableton_set_tempo` | Get/set tempo (BPM) |
 | `ableton_play` / `ableton_stop` / `ableton_stop_all_clips` | Transport |
 | `ableton_set_song_key` | Set root note and scale |
@@ -267,6 +269,7 @@ Once configured, you can ask your AI assistant:
 - "List the Drums browser folder, then load Street Kit onto track 0"
 - "Add a kick drum pattern on beats 1, 2, 3, 4"
 - "What's the current tempo?"
+- "Diagnose the AbletonOSC connection and patches"
 
 ## Built With
 
