@@ -109,15 +109,16 @@ func ytDlpArgs(u string) []string {
 	}
 }
 
-// ffmpegArgs decodes stdin to a full-length mono 44.1kHz WAV stream. Overall
-// size is bounded downstream by maxFileBytes rather than a fixed duration.
+// ffmpegArgs decodes stdin to a full-length stereo 44.1kHz WAV stream (stereo
+// so mix width can be measured; the analyzer downmixes to mono for the rest).
+// Overall size is bounded downstream by maxFileBytes rather than a duration.
 func ffmpegArgs() []string {
 	return []string{
 		"-hide_banner",
 		"-loglevel", "error",
 		"-i", "pipe:0",
 		"-vn",
-		"-ac", "1",
+		"-ac", "2",
 		"-ar", "44100",
 		"-f", "wav",
 		"pipe:1",

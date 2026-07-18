@@ -38,6 +38,9 @@ type Result struct {
 	ChordProgression  []ChordSegment `json:"chord_progression,omitempty"`
 	ChordSummary      string         `json:"chord_summary,omitempty"`
 	Sections          []Section      `json:"sections,omitempty"`
+	BrightnessHz      float64        `json:"brightness_hz,omitempty"`
+	CrestFactorDB     float64        `json:"crest_factor_db,omitempty"`
+	StereoWidth       float64        `json:"stereo_width"`
 	LengthBarsAtBPM   float64        `json:"length_bars_at_project_tempo,omitempty"`
 	Note              string         `json:"note"`
 }
@@ -82,10 +85,13 @@ func AnalyzeFile(path string, projectTempo float64) (Result, error) {
 // analyzeWAVStream decodes WAV audio from r and computes sampling-oriented
 // metadata. Path and Note are left for the caller to fill in per source.
 func analyzeWAVStream(r io.Reader, projectTempo float64) (Result, error) {
-	mono, sampleRate, channels, err := loadMonoWAV(io.LimitReader(r, maxFileBytes+1))
+	audio, err := loadWAV(io.LimitReader(r, maxFileBytes+1))
 	if err != nil {
 		return Result{}, err
 	}
+	mono := audio.mono
+	sampleRate := audio.sampleRate
+	channels := audio.channels
 	if len(mono) == 0 || sampleRate <= 0 {
 		return Result{}, errors.New("no audio samples decoded")
 	}
@@ -129,6 +135,10 @@ func analyzeWAVStream(r io.Reader, projectTempo float64) (Result, error) {
 	if sections, ok := estimateSections(mono, sampleRate); ok {
 		out.Sections = sections
 	}
+	tex := estimateTexture(audio.mono, audio.left, audio.right, sampleRate, channels)
+	out.BrightnessHz = tex.BrightnessHz
+	out.CrestFactorDB = tex.CrestFactorDB
+	out.StereoWidth = tex.StereoWidth
 	if projectTempo > 0 && duration > 0 {
 		beats := duration * (projectTempo / 60)
 		out.LengthBarsAtBPM = beats / 4
@@ -155,13 +165,24 @@ func validateLocalAudioPath(path string) (string, error) {
 	return filepath.Clean(path), nil
 }
 
-func loadMonoWAV(f io.Reader) ([]float64, int, int, error) {
+// wavAudio holds decoded audio: a mono downmix plus the first two channels
+// (left/right) when the source is multi-channel. For mono sources left/right
+// alias the mono signal.
+type wavAudio struct {
+	mono       []float64
+	left       []float64
+	right      []float64
+	sampleRate int
+	channels   int
+}
+
+func loadWAV(f io.Reader) (wavAudio, error) {
 	var header [12]byte
 	if _, err := io.ReadFull(f, header[:]); err != nil {
-		return nil, 0, 0, fmt.Errorf("read wav header: %w", err)
+		return wavAudio{}, fmt.Errorf("read wav header: %w", err)
 	}
 	if string(header[0:4]) != "RIFF" || string(header[8:12]) != "WAVE" {
-		return nil, 0, 0, errors.New("not a RIFF/WAVE file")
+		return wavAudio{}, errors.New("not a RIFF/WAVE file")
 	}
 
 	var (
@@ -178,7 +199,7 @@ func loadMonoWAV(f io.Reader) ([]float64, int, int, error) {
 			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 				break
 			}
-			return nil, 0, 0, err
+			return wavAudio{}, err
 		}
 		chunkID := string(chunkHeader[0:4])
 		chunkSize := binary.LittleEndian.Uint32(chunkHeader[4:8])
@@ -189,18 +210,18 @@ func loadMonoWAV(f io.Reader) ([]float64, int, int, error) {
 		if chunkID == "data" {
 			payload, err := io.ReadAll(f)
 			if err != nil {
-				return nil, 0, 0, fmt.Errorf("read data chunk: %w", err)
+				return wavAudio{}, fmt.Errorf("read data chunk: %w", err)
 			}
 			data = payload
 			break
 		}
 
 		if chunkSize > maxChunkBytes {
-			return nil, 0, 0, fmt.Errorf("%s chunk too large (%d bytes)", chunkID, chunkSize)
+			return wavAudio{}, fmt.Errorf("%s chunk too large (%d bytes)", chunkID, chunkSize)
 		}
 		payload := make([]byte, chunkSize)
 		if _, err := io.ReadFull(f, payload); err != nil {
-			return nil, 0, 0, fmt.Errorf("read %s chunk: %w", chunkID, err)
+			return wavAudio{}, fmt.Errorf("read %s chunk: %w", chunkID, err)
 		}
 		// Chunks are word-aligned.
 		if chunkSize%2 == 1 {
@@ -209,7 +230,7 @@ func loadMonoWAV(f io.Reader) ([]float64, int, int, error) {
 		}
 		if chunkID == "fmt " {
 			if len(payload) < 16 {
-				return nil, 0, 0, errors.New("invalid fmt chunk")
+				return wavAudio{}, errors.New("invalid fmt chunk")
 			}
 			audioFormat = binary.LittleEndian.Uint16(payload[0:2])
 			channels = binary.LittleEndian.Uint16(payload[2:4])
@@ -218,80 +239,97 @@ func loadMonoWAV(f io.Reader) ([]float64, int, int, error) {
 		}
 	}
 	if len(data) == 0 || channels == 0 || sampleRate == 0 {
-		return nil, 0, 0, errors.New("wav missing fmt/data")
+		return wavAudio{}, errors.New("wav missing fmt/data")
 	}
 	if audioFormat != 1 && audioFormat != 3 {
-		return nil, 0, 0, fmt.Errorf("unsupported wav format code %d (need PCM or IEEE float)", audioFormat)
+		return wavAudio{}, fmt.Errorf("unsupported wav format code %d (need PCM or IEEE float)", audioFormat)
 	}
 
-	mono, err := decodeMono(data, int(channels), int(bitsPerSample), audioFormat)
+	chans, err := decodeChannels(data, int(channels), int(bitsPerSample), audioFormat)
 	if err != nil {
-		return nil, 0, 0, err
+		return wavAudio{}, err
 	}
-	return mono, int(sampleRate), int(channels), nil
+	if len(chans) == 0 || len(chans[0]) == 0 {
+		return wavAudio{}, errors.New("no audio samples decoded")
+	}
+
+	audio := wavAudio{
+		mono:       downmix(chans),
+		left:       chans[0],
+		sampleRate: int(sampleRate),
+		channels:   int(channels),
+	}
+	if len(chans) >= 2 {
+		audio.right = chans[1]
+	} else {
+		audio.right = chans[0]
+	}
+	return audio, nil
 }
 
-func decodeMono(data []byte, channels, bitsPerSample int, audioFormat uint16) ([]float64, error) {
+func downmix(chans [][]float64) []float64 {
+	n := len(chans[0])
+	out := make([]float64, n)
+	for i := 0; i < n; i++ {
+		var sum float64
+		for ch := range chans {
+			sum += chans[ch][i]
+		}
+		out[i] = sum / float64(len(chans))
+	}
+	return out
+}
+
+// decodeChannels splits interleaved PCM/float WAV data into per-channel float64
+// samples in [-1, 1].
+func decodeChannels(data []byte, channels, bitsPerSample int, audioFormat uint16) ([][]float64, error) {
 	if channels < 1 {
 		return nil, errors.New("invalid channel count")
 	}
+	bytesPerSample, decode, err := sampleDecoder(bitsPerSample, audioFormat)
+	if err != nil {
+		return nil, err
+	}
+	frame := bytesPerSample * channels
+	if len(data) < frame {
+		return nil, errors.New("wav data too short")
+	}
+	n := len(data) / frame
+	out := make([][]float64, channels)
+	for ch := 0; ch < channels; ch++ {
+		out[ch] = make([]float64, n)
+	}
+	for i := 0; i < n; i++ {
+		for ch := 0; ch < channels; ch++ {
+			off := i*frame + ch*bytesPerSample
+			out[ch][i] = decode(data[off:])
+		}
+	}
+	return out, nil
+}
+
+// sampleDecoder returns the byte width and a decode function for a WAV sample
+// format.
+func sampleDecoder(bitsPerSample int, audioFormat uint16) (int, func([]byte) float64, error) {
 	switch {
 	case audioFormat == 1 && bitsPerSample == 16:
-		frame := 2 * channels
-		if len(data) < frame {
-			return nil, errors.New("wav data too short")
-		}
-		n := len(data) / frame
-		out := make([]float64, n)
-		for i := 0; i < n; i++ {
-			var sum float64
-			for ch := 0; ch < channels; ch++ {
-				off := i*frame + ch*2
-				sample := int16(binary.LittleEndian.Uint16(data[off : off+2]))
-				sum += float64(sample) / 32768.0
-			}
-			out[i] = sum / float64(channels)
-		}
-		return out, nil
+		return 2, func(b []byte) float64 {
+			return float64(int16(binary.LittleEndian.Uint16(b[0:2]))) / 32768.0
+		}, nil
 	case audioFormat == 1 && bitsPerSample == 24:
-		frame := 3 * channels
-		if len(data) < frame {
-			return nil, errors.New("wav data too short")
-		}
-		n := len(data) / frame
-		out := make([]float64, n)
-		for i := 0; i < n; i++ {
-			var sum float64
-			for ch := 0; ch < channels; ch++ {
-				off := i*frame + ch*3
-				v := int32(data[off]) | int32(data[off+1])<<8 | int32(data[off+2])<<16
-				if v&0x800000 != 0 {
-					v |= ^0xFFFFFF
-				}
-				sum += float64(v) / 8388608.0
+		return 3, func(b []byte) float64 {
+			v := int32(b[0]) | int32(b[1])<<8 | int32(b[2])<<16
+			if v&0x800000 != 0 {
+				v |= ^0xFFFFFF
 			}
-			out[i] = sum / float64(channels)
-		}
-		return out, nil
+			return float64(v) / 8388608.0
+		}, nil
 	case audioFormat == 3 && bitsPerSample == 32:
-		frame := 4 * channels
-		if len(data) < frame {
-			return nil, errors.New("wav data too short")
-		}
-		n := len(data) / frame
-		out := make([]float64, n)
-		for i := 0; i < n; i++ {
-			var sum float64
-			for ch := 0; ch < channels; ch++ {
-				off := i*frame + ch*4
-				bits := binary.LittleEndian.Uint32(data[off : off+4])
-				sum += float64(math.Float32frombits(bits))
-			}
-			out[i] = sum / float64(channels)
-		}
-		return out, nil
+		return 4, func(b []byte) float64 {
+			return float64(math.Float32frombits(binary.LittleEndian.Uint32(b[0:4])))
+		}, nil
 	default:
-		return nil, fmt.Errorf("unsupported wav encoding: format=%d bits=%d", audioFormat, bitsPerSample)
+		return 0, nil, fmt.Errorf("unsupported wav encoding: format=%d bits=%d", audioFormat, bitsPerSample)
 	}
 }
 

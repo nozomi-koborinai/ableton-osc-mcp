@@ -52,8 +52,8 @@ func TestFfmpegArgsStreamMono(t *testing.T) {
 
 	args := ffmpegArgs()
 	joined := strings.Join(args, " ")
-	if !strings.Contains(joined, "-ac 1") || !strings.Contains(joined, "-ar 44100") {
-		t.Errorf("ffmpeg args missing mono/44.1k downmix: %v", args)
+	if !strings.Contains(joined, "-ac 2") || !strings.Contains(joined, "-ar 44100") {
+		t.Errorf("ffmpeg args missing stereo/44.1k output: %v", args)
 	}
 	if !strings.Contains(joined, "pipe:1") {
 		t.Errorf("ffmpeg args must stream to stdout, not a file: %v", args)
