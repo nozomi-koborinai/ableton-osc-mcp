@@ -24,6 +24,9 @@ type AnalyzeAudioURLOutput struct {
 	BPMConfidence     float64 `json:"bpm_confidence"`
 	OnsetCount        int     `json:"onset_count"`
 	SuggestedWarpMode string  `json:"suggested_warp_mode"`
+	Key               string  `json:"key,omitempty"`
+	Scale             string  `json:"scale,omitempty"`
+	KeyConfidence     float64 `json:"key_confidence,omitempty"`
 	LengthBarsAtBPM   float64 `json:"length_bars_at_project_tempo,omitempty"`
 	Note              string  `json:"note"`
 	NextStep          string  `json:"next_step"`
@@ -31,7 +34,7 @@ type AnalyzeAudioURLOutput struct {
 
 func NewAbletonAnalyzeAudioURL(g *genkit.Genkit) ai.Tool {
 	return genkit.DefineTool(g, "ableton_analyze_audio_url",
-		"Reference-analyze audio at an http(s) URL (e.g. YouTube) for tempo/length/levels. Streams a short window through yt-dlp+ffmpeg in memory, saves nothing, and never extracts melodies or notes. Requires yt-dlp and ffmpeg on PATH; you are responsible for your right to access the URL.",
+		"Reference-analyze audio at an http(s) URL (e.g. YouTube) for tempo/length/levels and approximate key/scale. Streams a short window through yt-dlp+ffmpeg in memory, saves nothing, and never extracts melodies or notes. Requires yt-dlp and ffmpeg on PATH; you are responsible for your right to access the URL.",
 		func(tc *ai.ToolContext, input AnalyzeAudioURLInput) (AnalyzeAudioURLOutput, error) {
 			projectTempo := 0.0
 			if input.ProjectTempo != nil {
@@ -53,9 +56,12 @@ func NewAbletonAnalyzeAudioURL(g *genkit.Genkit) ai.Tool {
 				BPMConfidence:     got.BPMConfidence,
 				OnsetCount:        got.OnsetCount,
 				SuggestedWarpMode: got.SuggestedWarpMode,
+				Key:               got.Key,
+				Scale:             got.Scale,
+				KeyConfidence:     got.KeyConfidence,
 				LengthBarsAtBPM:   got.LengthBarsAtBPM,
 				Note:              got.Note,
-				NextStep:          "Use the tempo/length as a reference to build your own part. This tool does not import the audio; place only samples you have the right to use.",
+				NextStep:          "Use the tempo/length/key as a reference to build your own part. This tool does not import the audio; place only samples you have the right to use.",
 			}, nil
 		},
 	)

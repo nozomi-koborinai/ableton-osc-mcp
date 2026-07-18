@@ -32,6 +32,9 @@ type Result struct {
 	BPMConfidence     float64 `json:"bpm_confidence"`
 	OnsetCount        int     `json:"onset_count"`
 	SuggestedWarpMode string  `json:"suggested_warp_mode"`
+	Key               string  `json:"key,omitempty"`
+	Scale             string  `json:"scale,omitempty"`
+	KeyConfidence     float64 `json:"key_confidence,omitempty"`
 	LengthBarsAtBPM   float64 `json:"length_bars_at_project_tempo,omitempty"`
 	Note              string  `json:"note"`
 }
@@ -108,6 +111,11 @@ func analyzeWAVStream(r io.Reader, projectTempo float64) (Result, error) {
 		BPMConfidence:     confidence,
 		OnsetCount:        onsets,
 		SuggestedWarpMode: warpMode,
+	}
+	if key, ok := estimateKey(analyze, sampleRate); ok {
+		out.Key = key.Tonic
+		out.Scale = key.Scale
+		out.KeyConfidence = key.Confidence
 	}
 	if projectTempo > 0 && duration > 0 {
 		beats := duration * (projectTempo / 60)
