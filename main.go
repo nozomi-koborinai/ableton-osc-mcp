@@ -83,6 +83,7 @@ func main() {
 		tools.NewAbletonHumanizeClip(g, ableton),
 		tools.NewAbletonDuplicateClipTo(g, ableton),
 		tools.NewAbletonSetClipName(g, ableton),
+		tools.NewAbletonCreateDrumVariation(g, ableton),
 
 		// Scenes
 		tools.NewAbletonFireScene(g, ableton),
