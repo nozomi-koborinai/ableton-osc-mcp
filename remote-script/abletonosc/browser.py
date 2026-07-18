@@ -111,8 +111,21 @@ class BrowserHandler(AbletonOSCHandler):
             return tuple(infos[:40])
 
         def browser_list_folder_handler(params: Tuple[Any]):
-            """Params: root_name, *path_parts. Lists child names under a browser folder."""
+            """Params: (none) lists browser roots; otherwise root_name, *path_parts."""
             browser = Live.Application.get_application().browser
+            if not params:
+                names = []
+                for root in _browser_roots(browser):
+                    try:
+                        loadable = bool(getattr(root, "is_loadable", False))
+                        names.append(
+                            "%s|loadable=%s|folder=%s"
+                            % (root.name, loadable, True)
+                        )
+                    except Exception:
+                        names.append("%s|loadable=False|folder=True" % root.name)
+                return ("roots", *names[:30])
+
             root_name = str(params[0])
             path_parts = [str(p) for p in params[1:]]
             node = _resolve_path(browser, root_name, path_parts)

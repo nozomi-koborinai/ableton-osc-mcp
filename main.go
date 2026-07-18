@@ -84,7 +84,9 @@ func main() {
 		tools.NewAbletonGetDeviceParameters(g, ableton),
 		tools.NewAbletonSetDeviceParameter(g, ableton),
 		tools.NewAbletonFindBrowserItem(g, ableton),
+		tools.NewAbletonListBrowserFolder(g, ableton),
 		tools.NewAbletonLoadBrowserItem(g, ableton),
+		tools.NewAbletonLoadBrowserPath(g, ableton),
 		tools.NewAbletonLoadDevicePreset(g, ableton),
 
 		// Mix bus / Master

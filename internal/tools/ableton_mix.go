@@ -266,34 +266,22 @@ func NewAbletonLoadOnMaster(g *genkit.Genkit, client *abletonosc.Client) ai.Tool
 			if input.RootName == "" || input.ItemName == "" {
 				return LoadOnMasterOutput{}, errors.New("root_name and item_name are required")
 			}
-			args := []interface{}{int32(-1), int32(-1), input.RootName}
-			for _, p := range input.PathParts {
-				args = append(args, p)
-			}
-			args = append(args, input.ItemName)
-			res, err := client.QueryWithTimeout(10*time.Second, "/live/browser/load_at_path", args...)
+			res, err := client.QueryWithTimeout(
+				10*time.Second,
+				"/live/browser/load_at_path",
+				loadAtPathArgs(-1, input.RootName, input.PathParts, input.ItemName)...,
+			)
 			if err != nil {
 				return LoadOnMasterOutput{}, err
 			}
-			if err := ensureResponseLen(res, 5); err != nil {
-				return LoadOnMasterOutput{}, err
-			}
-			status := fmt.Sprint(res[1])
-			if status != "loaded" {
-				return LoadOnMasterOutput{}, fmt.Errorf("load failed: status=%s reply=%v", status, res)
-			}
-			before, err := abletonosc.AsInt(res[3])
-			if err != nil {
-				return LoadOnMasterOutput{}, err
-			}
-			after, err := abletonosc.AsInt(res[4])
+			parsed, err := parseLoadAtPathResponse(res)
 			if err != nil {
 				return LoadOnMasterOutput{}, err
 			}
 			return LoadOnMasterOutput{
-				Loaded:        fmt.Sprint(res[2]),
-				DevicesBefore: before,
-				DevicesAfter:  after,
+				Loaded:        parsed.Loaded,
+				DevicesBefore: parsed.DevicesBefore,
+				DevicesAfter:  parsed.DevicesAfter,
 			}, nil
 		},
 	)

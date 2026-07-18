@@ -9,7 +9,7 @@ Adds Live Browser `load_item()` support and master-track mix helpers so MCP tool
 | `/live/browser/find` | `query` | Search loadable items (up to 20 paths) |
 | `/live/track/load/browser_item` | `track_index`, `item_name` | Load by name onto a track |
 | `/live/device/load/preset` | `track_index`, `device_index`, `preset_name` | Hotswap preset onto a device |
-| `/live/browser/list_folder` | `root_name`, `*path_parts` | List folder children |
+| `/live/browser/list_folder` | _(none)_ or `root_name`, `*path_parts` | List roots, or children under a folder |
 | `/live/browser/load_at_path` | `track_index` (`-1`=master), `device_index`, `root_name`, `*path_parts`, `item_name` | Load by exact path |
 | `/live/browser/debug` | _(none)_ | Dump browser roots (debug) |
 | `/live/master/get/volume` | — | Master volume |
