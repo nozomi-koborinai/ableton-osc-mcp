@@ -12,6 +12,7 @@ This enables AI assistants (Claude, Cursor, etc.) to interact with Ableton Live 
 - Create MIDI tracks and clips
 - Add, read, and clear MIDI notes
 - Get/set tempo
+- Inspect tempo, playback state, scenes, and indexed tracks in one snapshot
 - List devices on a track
 - Load Drum Racks / presets from Live's Browser (with the included AbletonOSC patch)
 - Fire clip slots
@@ -219,6 +220,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `ableton_play` / `ableton_stop` / `ableton_stop_all_clips` | Transport |
 | `ableton_set_song_key` | Set root note and scale |
 | `ableton_set_metronome` | Enable/disable metronome |
+| `ableton_get_session_snapshot` | Get tempo, playback state, scene count, and indexed track names |
 | `ableton_get_track_names` | List track names |
 | `ableton_get_track_devices` | List devices on a track |
 | `ableton_create_midi_track` | Create a MIDI track |
