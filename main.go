@@ -51,6 +51,7 @@ func main() {
 		tools.NewAbletonStopAllClips(g, ableton),
 		tools.NewAbletonSetSongKey(g, ableton),
 		tools.NewAbletonSetMetronome(g, ableton),
+		tools.NewAbletonGetSessionSnapshot(g, ableton),
 
 		// Tracks
 		tools.NewAbletonGetTrackNames(g, ableton),
