@@ -17,6 +17,7 @@ This enables AI assistants (Claude, Cursor, etc.) to interact with Ableton Live 
 - Load Drum Racks / presets from Live's Browser (with the included AbletonOSC patch)
 - Browse Live Browser folders by path and load items onto tracks
 - Set up a drum track with kit + clip + pattern in one recipe
+- Compare a drum, bass, or scene A/B variation in one create→audition recipe
 - Humanize MIDI clips with microtiming, velocity variation, and swing
 - Create safe A/B drum variations that change only groove, density, or fills
 - Create safe A/B bass variations that change only octave, note length, or groove
@@ -251,6 +252,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `ableton_create_drum_variation` | Duplicate a drum clip into an empty slot and change groove, density, or fill for A/B comparison (rejects no-op changes) |
 | `ableton_create_bass_variation` | Duplicate a bass clip into an empty slot and change octave, note length, or groove for A/B comparison |
 | `ableton_audition_ab` | Alternate A/B clips or scenes for N bars, waiting on Live song time with 1-bar launch quantization |
+| `ableton_compare_ab_variation` | Create one drum/bass/scene variation, audition A→B, and return a preference prompt |
 | `ableton_record_variation_preference` | Save whether the source or variation matched your taste (drum, bass, scene, or mix) |
 | `ableton_get_taste_profile` | Summarize saved A/B choices and suggest the next comparison across all families |
 | `ableton_fire_clip_slot` / `ableton_stop_clip` | Fire/stop a clip |
