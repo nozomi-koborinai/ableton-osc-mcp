@@ -30,6 +30,9 @@ type AnalyzeAudioURLOutput struct {
 	ChordProgression  []audioanalyze.ChordSegment `json:"chord_progression,omitempty"`
 	ChordSummary      string                      `json:"chord_summary,omitempty"`
 	Sections          []audioanalyze.Section      `json:"sections,omitempty"`
+	BrightnessHz      float64                     `json:"brightness_hz,omitempty"`
+	CrestFactorDB     float64                     `json:"crest_factor_db,omitempty"`
+	StereoWidth       float64                     `json:"stereo_width"`
 	LengthBarsAtBPM   float64                     `json:"length_bars_at_project_tempo,omitempty"`
 	Note              string                      `json:"note"`
 	NextStep          string                      `json:"next_step"`
@@ -37,7 +40,7 @@ type AnalyzeAudioURLOutput struct {
 
 func NewAbletonAnalyzeAudioURL(g *genkit.Genkit) ai.Tool {
 	return genkit.DefineTool(g, "ableton_analyze_audio_url",
-		"Reference-analyze audio at an http(s) URL (e.g. YouTube) for tempo/length/levels, approximate key/scale, chord progression, and an energy-based section map. Streams the full track through yt-dlp+ffmpeg in memory, saves nothing, and never extracts melodies or notes. Requires yt-dlp and ffmpeg on PATH; you are responsible for your right to access the URL.",
+		"Reference-analyze audio at an http(s) URL (e.g. YouTube) for tempo/length/levels, approximate key/scale, chord progression, an energy-based section map, and texture indicators (brightness/dynamics/stereo width). Streams the full track through yt-dlp+ffmpeg in memory, saves nothing, and never extracts melodies or notes. Requires yt-dlp and ffmpeg on PATH; you are responsible for your right to access the URL.",
 		func(tc *ai.ToolContext, input AnalyzeAudioURLInput) (AnalyzeAudioURLOutput, error) {
 			projectTempo := 0.0
 			if input.ProjectTempo != nil {
@@ -65,6 +68,9 @@ func NewAbletonAnalyzeAudioURL(g *genkit.Genkit) ai.Tool {
 				ChordProgression:  got.ChordProgression,
 				ChordSummary:      got.ChordSummary,
 				Sections:          got.Sections,
+				BrightnessHz:      got.BrightnessHz,
+				CrestFactorDB:     got.CrestFactorDB,
+				StereoWidth:       got.StereoWidth,
 				LengthBarsAtBPM:   got.LengthBarsAtBPM,
 				Note:              got.Note,
 				NextStep:          "Use the tempo/key/chord progression as a reference to build your own part. This tool does not import the audio; place only samples you have the right to use.",
