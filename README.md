@@ -257,7 +257,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `ableton_duplicate_clip_to` | Duplicate clip to another slot |
 | `ableton_set_clip_name` | Rename a clip |
 | `ableton_fire_scene` | Fire a scene |
-| `ableton_create_scene_energy_variation` | Duplicate a scene, then make a MIDI velocity lift or pullback for A/B comparison |
+| `ableton_create_scene_energy_variation` | Duplicate a scene, then make a MIDI velocity lift or pullback for A/B comparison (keeps B if fire fails) |
 | `ableton_get_device_parameters` / `ableton_set_device_parameter` | Device parameters |
 | `ableton_find_browser_item` | Search Live Browser (requires patch) |
 | `ableton_list_browser_folder` | List Browser roots or folder children (requires patch) |

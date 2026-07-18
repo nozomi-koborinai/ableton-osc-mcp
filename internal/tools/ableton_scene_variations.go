@@ -156,7 +156,11 @@ func createSceneEnergyVariation(client variationClient, input CreateSceneEnergyV
 	fired := false
 	if input.Fire {
 		if err := client.Send("/live/scene/fire", int32(targetSceneIndex)); err != nil {
-			return CreateSceneEnergyVariationOutput{}, discardSceneVariation(client, targetSceneIndex, fmt.Errorf("fire target scene: %w", err))
+			// B is already a valid variation; keep it for A/B comparison even if launch fails.
+			return CreateSceneEnergyVariationOutput{}, fmt.Errorf(
+				"fire target scene %d failed: %w (variation scene kept for A/B comparison)",
+				targetSceneIndex, err,
+			)
 		}
 		fired = true
 	}
