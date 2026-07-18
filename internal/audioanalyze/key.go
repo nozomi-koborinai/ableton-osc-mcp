@@ -113,6 +113,18 @@ func pearson(a, b []float64) float64 {
 // chromagram accumulates spectral magnitude into 12 pitch classes across frames.
 func chromagram(samples []float64, sampleRate int) [12]float64 {
 	var chroma [12]float64
+	for _, frame := range frameChromas(samples, sampleRate) {
+		for pc := 0; pc < 12; pc++ {
+			chroma[pc] += frame[pc]
+		}
+	}
+	return chroma
+}
+
+// frameChromas returns a chroma vector (12 pitch-class magnitudes) per analysis
+// frame, at keyHopSize spacing. Each frame is used for both key and chord
+// estimation.
+func frameChromas(samples []float64, sampleRate int) [][12]float64 {
 	window := hannWindow(keyFrameSize)
 	buf := make([]float64, keyFrameSize)
 	minBin := int(math.Floor(keyMinFreq * float64(keyFrameSize) / float64(sampleRate)))
@@ -124,11 +136,13 @@ func chromagram(samples []float64, sampleRate int) [12]float64 {
 		maxBin = keyFrameSize / 2
 	}
 
+	var frames [][12]float64
 	for start := 0; start+keyFrameSize <= len(samples); start += keyHopSize {
 		for i := 0; i < keyFrameSize; i++ {
 			buf[i] = samples[start+i] * window[i]
 		}
 		re, im := fftReal(buf)
+		var chroma [12]float64
 		for bin := minBin; bin <= maxBin; bin++ {
 			mag := math.Hypot(re[bin], im[bin])
 			if mag <= 0 {
@@ -142,8 +156,14 @@ func chromagram(samples []float64, sampleRate int) [12]float64 {
 			}
 			chroma[pc] += mag
 		}
+		frames = append(frames, chroma)
 	}
-	return chroma
+	return frames
+}
+
+// frameDurationSec is the wall-clock spacing between consecutive frame chromas.
+func frameDurationSec(sampleRate int) float64 {
+	return float64(keyHopSize) / float64(sampleRate)
 }
 
 func hannWindow(n int) []float64 {

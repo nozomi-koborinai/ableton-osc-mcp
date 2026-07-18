@@ -252,6 +252,14 @@ performance.
 Key/scale is a chroma-based estimate (Krumhansl profiles) reported with a
 confidence; treat it as a starting hint, since dense mixes can fool it.
 
+They also return an approximate **chord progression**: the audio is split into
+short windows, each matched to a major/minor triad, and consecutive matches are
+merged into a timed sequence (`chord_progression`) plus a compact summary
+(`chord_summary`, e.g. `C | G | Am | F`). Low-confidence spans are marked
+`N.C.`. This covers only major/minor triads — extended chords, inversions, and
+busy mixes will be approximated, so use it as a reference for building your own
+part, not as a transcription.
+
 - `ableton_analyze_local_audio` — inspects a **local `.wav` path you already have**. No network access.
 - `ableton_analyze_audio_url` — reference-analyzes an `http(s)` URL (e.g. YouTube). It streams at most 60s through `yt-dlp` + `ffmpeg` **in memory, analyzes it, and discards it** — nothing is written to disk.
 
@@ -287,8 +295,8 @@ Use results with files you have rights to use, then load into Live and call
 | `ableton_get_clip_notes` / `ableton_add_midi_notes` / `ableton_clear_clip_notes` | MIDI notes |
 | `ableton_humanize_clip` | Add microtiming, velocity variation, and optional swing to clip notes |
 | `ableton_match_clip_tempo` | Enable Warp on an audio clip so it follows the project tempo (`beats` or `complex`) |
-| `ableton_analyze_local_audio` | Analyze a local `.wav` (duration, levels, estimated BPM, approx. key/scale). Rejects URLs; no melody/note extraction |
-| `ableton_analyze_audio_url` | Reference-analyze an `http(s)`/YouTube URL (tempo/length/levels, approx. key/scale). Streams via yt-dlp+ffmpeg in memory, saves nothing; requires yt-dlp+ffmpeg |
+| `ableton_analyze_local_audio` | Analyze a local `.wav` (duration, levels, BPM, approx. key/scale + chord progression). Rejects URLs; no melody/note extraction |
+| `ableton_analyze_audio_url` | Reference-analyze an `http(s)`/YouTube URL (tempo/length/levels, approx. key/scale + chord progression). Streams via yt-dlp+ffmpeg in memory, saves nothing; requires yt-dlp+ffmpeg |
 | `ableton_compare_ab_variation` | Preferred A/B entry: create one drum/bass/scene variation, audition A→B, return a preference prompt |
 | `ableton_create_drum_variation` | Create-only drum A/B variation (groove / density / fill); use when you do not want audition yet |
 | `ableton_create_bass_variation` | Create-only bass A/B variation (octave / staccato / groove) |

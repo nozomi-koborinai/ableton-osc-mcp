@@ -21,22 +21,24 @@ const (
 )
 
 type Result struct {
-	Path              string  `json:"path"`
-	Format            string  `json:"format"`
-	DurationSec       float64 `json:"duration_sec"`
-	SampleRate        int     `json:"sample_rate"`
-	Channels          int     `json:"channels"`
-	PeakLevel         float64 `json:"peak_level"`
-	RMSLevel          float64 `json:"rms_level"`
-	EstimatedBPM      float64 `json:"estimated_bpm"`
-	BPMConfidence     float64 `json:"bpm_confidence"`
-	OnsetCount        int     `json:"onset_count"`
-	SuggestedWarpMode string  `json:"suggested_warp_mode"`
-	Key               string  `json:"key,omitempty"`
-	Scale             string  `json:"scale,omitempty"`
-	KeyConfidence     float64 `json:"key_confidence,omitempty"`
-	LengthBarsAtBPM   float64 `json:"length_bars_at_project_tempo,omitempty"`
-	Note              string  `json:"note"`
+	Path              string         `json:"path"`
+	Format            string         `json:"format"`
+	DurationSec       float64        `json:"duration_sec"`
+	SampleRate        int            `json:"sample_rate"`
+	Channels          int            `json:"channels"`
+	PeakLevel         float64        `json:"peak_level"`
+	RMSLevel          float64        `json:"rms_level"`
+	EstimatedBPM      float64        `json:"estimated_bpm"`
+	BPMConfidence     float64        `json:"bpm_confidence"`
+	OnsetCount        int            `json:"onset_count"`
+	SuggestedWarpMode string         `json:"suggested_warp_mode"`
+	Key               string         `json:"key,omitempty"`
+	Scale             string         `json:"scale,omitempty"`
+	KeyConfidence     float64        `json:"key_confidence,omitempty"`
+	ChordProgression  []ChordSegment `json:"chord_progression,omitempty"`
+	ChordSummary      string         `json:"chord_summary,omitempty"`
+	LengthBarsAtBPM   float64        `json:"length_bars_at_project_tempo,omitempty"`
+	Note              string         `json:"note"`
 }
 
 // AnalyzeFile analyzes a local WAV file already present on disk. It never
@@ -116,6 +118,10 @@ func analyzeWAVStream(r io.Reader, projectTempo float64) (Result, error) {
 		out.Key = key.Tonic
 		out.Scale = key.Scale
 		out.KeyConfidence = key.Confidence
+	}
+	if chords, summary, ok := estimateChords(analyze, sampleRate); ok {
+		out.ChordProgression = chords
+		out.ChordSummary = summary
 	}
 	if projectTempo > 0 && duration > 0 {
 		beats := duration * (projectTempo / 60)
