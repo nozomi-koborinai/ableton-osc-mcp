@@ -102,7 +102,9 @@ func (s *Store) save(profile Profile) error {
 		return fmt.Errorf("create taste profile temp file: %w", err)
 	}
 	tempPath := temp.Name()
-	defer os.Remove(tempPath)
+	defer func() {
+		_ = os.Remove(tempPath)
+	}()
 
 	if _, err := temp.Write(data); err != nil {
 		_ = temp.Close()
