@@ -20,6 +20,7 @@ This enables AI assistants (Claude, Cursor, etc.) to interact with Ableton Live 
 - Run drum / bass / scene A/B comparisons through one create→audition recipe, then save taste locally
 - Compare mix balance with snapshots you can restore
 - Humanize MIDI clips with microtiming, velocity variation, and swing
+- Match an audio clip to the project tempo with Warp (e.g. after loading a sample)
 - Autogain tracks toward a target meter level while audio is playing
 - Diagnose AbletonOSC connection and browser/master patch readiness
 - Fire clip slots and send raw OSC for advanced control
@@ -261,6 +262,7 @@ Mix is intentionally outside `ableton_compare_ab_variation` because it uses snap
 | `ableton_create_clip` | Create a clip in a slot |
 | `ableton_get_clip_notes` / `ableton_add_midi_notes` / `ableton_clear_clip_notes` | MIDI notes |
 | `ableton_humanize_clip` | Add microtiming, velocity variation, and optional swing to clip notes |
+| `ableton_match_clip_tempo` | Enable Warp on an audio clip so it follows the project tempo (`beats` or `complex`) |
 | `ableton_compare_ab_variation` | Preferred A/B entry: create one drum/bass/scene variation, audition A→B, return a preference prompt |
 | `ableton_create_drum_variation` | Create-only drum A/B variation (groove / density / fill); use when you do not want audition yet |
 | `ableton_create_bass_variation` | Create-only bass A/B variation (octave / staccato / groove) |
@@ -302,6 +304,7 @@ Once configured, you can ask your AI assistant:
 - "I prefer the variation; save that and suggest what to compare next"
 - "Create a mix B with the bass 0.05 lower, let me listen, then restore A"
 - "Humanize the drum clip with a bit of swing"
+- "Warp that audio sample to the project tempo"
 - "Autogain the drum and bass tracks while the beat is playing"
 - "Find drum kits named Street in the browser"
 - "List the Drums browser folder, then load Street Kit onto track 0"

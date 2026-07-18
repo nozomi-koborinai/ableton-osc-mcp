@@ -88,6 +88,7 @@ func main() {
 		tools.NewAbletonHumanizeClip(g, ableton),
 		tools.NewAbletonDuplicateClipTo(g, ableton),
 		tools.NewAbletonSetClipName(g, ableton),
+		tools.NewAbletonMatchClipTempo(g, ableton),
 		tools.NewAbletonCreateDrumVariation(g, ableton),
 		tools.NewAbletonCreateBassVariation(g, ableton),
 		tools.NewAbletonAuditionAB(g, ableton),
