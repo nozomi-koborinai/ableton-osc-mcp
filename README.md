@@ -21,6 +21,7 @@ This enables AI assistants (Claude, Cursor, etc.) to interact with Ableton Live 
 - Compare mix balance with snapshots you can restore
 - Humanize MIDI clips with microtiming, velocity variation, and swing
 - Match an audio clip to the project tempo with Warp (e.g. after loading a sample)
+- Analyze a local `.wav` for duration, levels, and estimated BPM (no URL downloads)
 - Autogain tracks toward a target meter level while audio is playing
 - Diagnose AbletonOSC connection and browser/master patch readiness
 - Fire clip slots and send raw OSC for advanced control
@@ -238,6 +239,18 @@ Keep the lower-level tools for special cases:
 
 Mix is intentionally outside `ableton_compare_ab_variation` because it uses snapshots, not clip/scene slots.
 
+## Local audio analysis
+
+`ableton_analyze_local_audio` inspects a **local `.wav` path you already have**.
+
+It estimates duration, peak/RMS level, onset density, and BPM for placement/warping decisions. It intentionally does **not**:
+
+- accept `http(s)` / YouTube links
+- download remote audio
+- transcribe lyrics or extract note-for-note MIDI of a performance
+
+Use it with files you have rights to use, then load into Live and call `ableton_match_clip_tempo` if needed.
+
 ## Available Tools
 
 | Tool | Description |
@@ -263,6 +276,7 @@ Mix is intentionally outside `ableton_compare_ab_variation` because it uses snap
 | `ableton_get_clip_notes` / `ableton_add_midi_notes` / `ableton_clear_clip_notes` | MIDI notes |
 | `ableton_humanize_clip` | Add microtiming, velocity variation, and optional swing to clip notes |
 | `ableton_match_clip_tempo` | Enable Warp on an audio clip so it follows the project tempo (`beats` or `complex`) |
+| `ableton_analyze_local_audio` | Analyze a local `.wav` (duration, levels, estimated BPM). Rejects URLs; no melody/note extraction |
 | `ableton_compare_ab_variation` | Preferred A/B entry: create one drum/bass/scene variation, audition A→B, return a preference prompt |
 | `ableton_create_drum_variation` | Create-only drum A/B variation (groove / density / fill); use when you do not want audition yet |
 | `ableton_create_bass_variation` | Create-only bass A/B variation (octave / staccato / groove) |
@@ -305,6 +319,7 @@ Once configured, you can ask your AI assistant:
 - "Create a mix B with the bass 0.05 lower, let me listen, then restore A"
 - "Humanize the drum clip with a bit of swing"
 - "Warp that audio sample to the project tempo"
+- "Analyze this local wav and tell me its BPM and how many bars it is at 128"
 - "Autogain the drum and bass tracks while the beat is playing"
 - "Find drum kits named Street in the browser"
 - "List the Drums browser folder, then load Street Kit onto track 0"
