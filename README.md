@@ -15,6 +15,7 @@ This enables AI assistants (Claude, Cursor, etc.) to interact with Ableton Live 
 - Inspect tempo, playback state, scenes, and indexed tracks in one snapshot
 - List devices on a track
 - Load Drum Racks / presets from Live's Browser (with the included AbletonOSC patch)
+- Browse Live Browser folders by path and load items onto tracks
 - Fire clip slots
 - Send raw OSC messages for advanced control
 
@@ -24,6 +25,8 @@ Stock [AbletonOSC](https://github.com/ideoforms/AbletonOSC) does not expose Live
 This repo ships a small Remote Script patch under [`remote-script/`](remote-script/) that adds:
 
 - `/live/browser/find`
+- `/live/browser/list_folder`
+- `/live/browser/load_at_path`
 - `/live/track/load/browser_item`
 - `/live/device/load/preset`
 
@@ -239,7 +242,9 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `ableton_fire_scene` | Fire a scene |
 | `ableton_get_device_parameters` / `ableton_set_device_parameter` | Device parameters |
 | `ableton_find_browser_item` | Search Live Browser (requires patch) |
-| `ableton_load_browser_item` | Load Drum Rack / instrument onto a track |
+| `ableton_list_browser_folder` | List Browser roots or folder children (requires patch) |
+| `ableton_load_browser_item` | Load Drum Rack / instrument onto a track by name |
+| `ableton_load_browser_path` | Load Browser item onto a track by exact path (requires patch) |
 | `ableton_load_device_preset` | Hotswap a preset onto a device |
 | `ableton_get_track_meter` | Track output meter levels |
 | `ableton_get_master_meter` / `ableton_get_master_volume` / `ableton_set_master_volume` | Master meter/volume (requires master patch) |
@@ -256,6 +261,7 @@ Once configured, you can ask your AI assistant:
 - "Set the tempo to 140 BPM"
 - "Create a MIDI track, load Street Kit, and add a 4-bar clip"
 - "Find drum kits named Street in the browser"
+- "List the Drums browser folder, then load Street Kit onto track 0"
 - "Add a kick drum pattern on beats 1, 2, 3, 4"
 - "What's the current tempo?"
 
