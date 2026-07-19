@@ -141,6 +141,7 @@ func createDrumVariation(client variationClient, input CreateDrumVariationInput)
 		"/live/clip_slot/duplicate_clip_to",
 		int32(input.TrackIndex),
 		int32(input.SourceClipIndex),
+		int32(input.TrackIndex),
 		int32(input.TargetClipIndex),
 	); err != nil {
 		return CreateDrumVariationOutput{}, fmt.Errorf("duplicate source clip: %w", err)
