@@ -84,8 +84,11 @@ func TestTasteProfileOutput(t *testing.T) {
 	if !strings.Contains(joined, "scene pullback") || !strings.Contains(joined, "mix volume") {
 		t.Errorf("NextSuggestions missing scene/mix = %v", got.NextSuggestions)
 	}
-	if len(got.NextSuggestions) != 4 {
-		t.Errorf("want 4 family suggestions, got %v", got.NextSuggestions)
+	if !strings.Contains(joined, "fx bypass") {
+		t.Errorf("NextSuggestions missing fx = %v", got.NextSuggestions)
+	}
+	if len(got.NextSuggestions) != 5 {
+		t.Errorf("want 5 family suggestions, got %v", got.NextSuggestions)
 	}
 }
 
@@ -96,11 +99,11 @@ func TestTasteProfileColdStartSuggestions(t *testing.T) {
 	if got.PreferencesRecorded != 0 {
 		t.Fatalf("PreferencesRecorded = %d", got.PreferencesRecorded)
 	}
-	if len(got.NextSuggestions) != 4 {
-		t.Fatalf("cold start suggestions = %v, want 4", got.NextSuggestions)
+	if len(got.NextSuggestions) != 5 {
+		t.Fatalf("cold start suggestions = %v, want 5", got.NextSuggestions)
 	}
 	joined := strings.Join(got.NextSuggestions, "\n")
-	for _, want := range []string{"bass groove", "drum density", "mix volume", "scene lift"} {
+	for _, want := range []string{"bass groove", "drum density", "fx bypass", "mix volume", "scene lift"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("cold start missing %q in %v", want, got.NextSuggestions)
 		}
