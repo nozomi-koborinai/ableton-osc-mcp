@@ -23,11 +23,14 @@ var (
 	minorProfile = [12]float64{6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17}
 )
 
-// KeyResult holds an approximate key estimate.
+// KeyResult holds an approximate key estimate plus the next-best alternative.
 type KeyResult struct {
-	Tonic      string  // e.g. "C", "F#"
-	Scale      string  // "major" or "minor"
-	Confidence float64 // 0..1 margin between the best and next-best fit
+	Tonic         string  // e.g. "C", "F#"
+	Scale         string  // "major" or "minor"
+	Confidence    float64 // 0..1 margin between the best and next-best fit
+	AltTonic      string
+	AltScale      string
+	AltConfidence float64
 }
 
 // estimateKey computes a chromagram and matches it to major/minor key profiles.
@@ -46,16 +49,20 @@ func estimateKey(samples []float64, sampleRate int) (KeyResult, bool) {
 
 	bestCorr := math.Inf(-1)
 	secondCorr := math.Inf(-1)
-	var bestTonic int
-	var bestScale string
+	var bestTonic, secondTonic int
+	var bestScale, secondScale string
 	consider := func(tonic int, scale string, corr float64) {
 		if corr > bestCorr {
 			secondCorr = bestCorr
+			secondTonic = bestTonic
+			secondScale = bestScale
 			bestCorr = corr
 			bestTonic = tonic
 			bestScale = scale
 		} else if corr > secondCorr {
 			secondCorr = corr
+			secondTonic = tonic
+			secondScale = scale
 		}
 	}
 	for tonic := 0; tonic < 12; tonic++ {
@@ -67,14 +74,22 @@ func estimateKey(samples []float64, sampleRate int) (KeyResult, bool) {
 	}
 
 	confidence := 0.0
+	altConfidence := 0.0
 	if !math.IsInf(secondCorr, -1) && bestCorr > 0 {
 		confidence = math.Max(0, math.Min(1, (bestCorr-secondCorr)/math.Max(bestCorr, 1e-9)))
+		altConfidence = math.Max(0, math.Min(1, secondCorr/math.Max(bestCorr, 1e-9)*0.85))
 	}
-	return KeyResult{
+	out := KeyResult{
 		Tonic:      pitchClassNames[bestTonic],
 		Scale:      bestScale,
 		Confidence: round2(confidence),
-	}, true
+	}
+	if !math.IsInf(secondCorr, -1) && secondScale != "" {
+		out.AltTonic = pitchClassNames[secondTonic]
+		out.AltScale = secondScale
+		out.AltConfidence = round2(altConfidence)
+	}
+	return out, true
 }
 
 // correlateProfile is the Pearson correlation between the chroma vector and a
