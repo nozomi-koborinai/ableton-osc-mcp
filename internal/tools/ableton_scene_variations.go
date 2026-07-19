@@ -189,7 +189,7 @@ func discardSceneVariation(client variationClient, sceneIndex int, cause error) 
 	return fmt.Errorf("scene variation failed: %w; duplicated scene %d removed", cause, sceneIndex)
 }
 
-func queryNumScenes(client variationClient) (int, error) {
+func queryNumScenes(client oscQuerier) (int, error) {
 	res, err := client.Query("/live/song/get/num_scenes")
 	if err != nil {
 		return 0, fmt.Errorf("get scene count: %w", err)
