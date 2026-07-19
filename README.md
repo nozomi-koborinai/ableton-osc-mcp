@@ -2,9 +2,11 @@
 
 ![hero-image](./assets/hero.jpeg)
 
-An MCP (Model Context Protocol) server for controlling **Ableton Live 11+** via [AbletonOSC](https://github.com/ideoforms/AbletonOSC).
+An MCP (Model Context Protocol) server for controlling **Ableton Live** via [AbletonOSC](https://github.com/ideoforms/AbletonOSC).
 
 This enables AI assistants (Claude, Cursor, etc.) to interact with Ableton Live for beat-making, music production, and creative workflows.
+
+**Primary development target: Ableton Live 11.0.12** (the Live Object Model reports `11.0`). Other Live 11/12 builds may work, but some tools depend on Live APIs that only exist (or behave differently) on newer versions — see [Supported Ableton Live versions](#supported-ableton-live-versions).
 
 ## Features
 
@@ -19,10 +21,11 @@ This enables AI assistants (Claude, Cursor, etc.) to interact with Ableton Live 
 - Search the local synced Splice library and load samples onto audio tracks (Live 12.0.5+)
 - Set up a drum track with kit + clip + pattern in one recipe
 - Run drum / bass / scene A/B comparisons through one create→audition recipe, then save taste locally
+- A/B the same clip dry vs processed by bypassing FX (`ableton_compare_fx_bypass`)
 - Compare mix balance with snapshots you can restore
 - Humanize MIDI clips with microtiming, velocity variation, and swing
 - Match an audio clip to the project tempo with Warp (e.g. after loading a sample)
-- Analyze a local `.wav`, or reference-analyze an `http(s)`/YouTube URL, for duration, levels, BPM, approximate key/scale, chord progression, an energy-based section map, and texture indicators (brightness/dynamics/stereo width) (URL streams in memory and is never saved)
+- Analyze a local `.wav`, or reference-analyze an `http(s)`/YouTube URL, for duration, levels, BPM/key alternatives, chords, section map, rhythm density, rms_per_beat, band balance, match axes, and texture (URL streams in memory and is never saved; no melody extraction)
 - Autogain tracks toward a target meter level while audio is playing
 - Diagnose AbletonOSC connection and browser/master patch readiness
 - Fire clip slots and send raw OSC for advanced control
@@ -38,6 +41,15 @@ This repo ships a small Remote Script patch under [`remote-script/`](remote-scri
 - `/live/track/load/browser_item`
 - `/live/device/load/preset`
 - `/live/clip_slot/create_audio_clip` (local audio file → session slot; Live 12.0.5+)
+- `/live/device/get/parameters/value_string` (all parameter display strings in one reply)
+- `/live/device/set/parameter/string` (set a parameter from a display string)
+- `/live/device/delete` (delete a device; confirms with before/after device count)
+- `/live/device/get|set/is_active` (device on/bypass for FX dry/wet A/B)
+- `/live/device/simpler/get` · `/set` · `/get/slices` (Simpler playback/slicing state, control, and slice map)
+- `/live/device/simpler/set/slices` (restore a saved manual slice map onto the same sample)
+- `/live/song/get/return_tracks` (list return tracks for send indices)
+- `/live/device/get|set/input_routing_type|channel` (+ available lists) for Compressor sidechain
+- `/live/clip/envelope/get|set_steps|clear|clear_all` (+ `/live/clip/get/has_envelopes`) for Session clip automation
 
 Install steps: see [remote-script/README.md](remote-script/README.md).
 After applying the patch, **restart Ableton Live** (a full restart is required the first time; `/live/api/reload` alone is not enough).
@@ -99,8 +111,31 @@ Both work well — choose based on your preference.
 
 ## Prerequisites
 
-- **Ableton Live 11** or later
+- **Ableton Live 11+** (see version notes below)
 - **AbletonOSC** installed and enabled in Live
+- This repo's **Remote Script patch** applied (see [Browser loading](#browser-loading-abletonosc-patch))
+
+## Supported Ableton Live versions
+
+| Role | Version | Notes |
+|------|---------|--------|
+| **Primary target (developed & smoke-tested against)** | **Live 11.0.12** (API label `11.0`) | Default assumption for tool behavior and docs in this repo |
+| Also intended to work | Live 11.x generally | Same LOM generation; minor UI/API differences may appear |
+| Partially supported | Live 12.x | Extra APIs unlock some tools; others still need the patch |
+
+Live's OSC/API only exposes a coarse version string (e.g. `11.0`), so this project documents the **full Suite build used in development** (11.0.12) separately from what `ableton_diagnose` reports.
+
+**Version-gated or unavailable tools (examples):**
+
+| Capability / tool area | Live 11.0.12 | Notes |
+|------------------------|--------------|--------|
+| Most transport, MIDI, browser load, Simpler slice, intents, routing, envelopes, FX bypass A/B, analysis | Available (with patch where noted) | Primary workflow |
+| `ableton_load_splice_sample` / `create_audio_clip` (path → Session slot) | **Not available** | Needs Live **12.0.5+** (`ClipSlot.create_audio_clip`) |
+| Drum Rack pad ← one-shot file load | **Not available** | Live 11 LOM cannot load a raw sample onto a single pad without replacing the rack |
+| Clip envelope breakpoint *lists* | Limited | Live 11 samples via `value_at_time`; full breakpoint lists need Live 12+ |
+| Destructive audio edit (crop / reverse / split / consolidate) | **Not exposed** | No stable LOM path; use non-destructive region extract / warp / pitch instead |
+
+Before relying on a gated feature, call **`ableton_diagnose`** and check `capabilities[]` (`ok` / `next_step`). A tool that exists in the MCP schema may still fail or be a no-op on your Live build if the underlying API or patch handler is missing.
 
 ## Installation
 
@@ -273,6 +308,13 @@ Finally, a few **texture indicators** describe the mix objectively:
 URL sources are decoded in stereo so width can be measured, then downmixed for
 the rest of the analysis.
 
+For production decisions (not melody extraction), both tools also return:
+- `bpm_alternatives` / `key_alternatives` — half/double tempo and second-best key when in range
+- `rhythm_density` — onsets per bar at the estimated tempo
+- `rms_per_beat` — per-beat energy envelope (capped) for chop / fill placement
+- `band_balance` — relative low / mid / high energy shares
+- `match_axes` — three observation axes (`drum_density`, `low_end_role`, `space_amount`) with short hints
+
 - `ableton_analyze_local_audio` — inspects a **local `.wav` path you already have**. No network access.
 - `ableton_analyze_audio_url` — reference-analyzes an `http(s)` URL (e.g. YouTube). It streams the track through `yt-dlp` + `ffmpeg` **in memory, analyzes it, and discards it** — nothing is written to disk (bounded to ~15 min for safety).
 
@@ -293,16 +335,20 @@ finished arrangement.
 | Tool | Description |
 |------|-------------|
 | `ableton_test` | Test connection to AbletonOSC |
-| `ableton_diagnose` | Diagnose AbletonOSC connection and browser/master patch availability |
+| `ableton_diagnose` | Diagnose AbletonOSC connection, browser/master patches, Live version, and feature capabilities (e.g. `create_audio_clip` needs Live 12.0.5+) |
+| `ableton_preview_destructive` | Preview a destructive action (delete track/clip/device, clear notes/scene) as a diff summary without executing |
 | `ableton_get_tempo` / `ableton_set_tempo` | Get/set tempo (BPM) |
 | `ableton_play` / `ableton_stop` / `ableton_stop_all_clips` | Transport |
 | `ableton_set_song_key` | Set root note and scale |
 | `ableton_set_metronome` | Enable/disable metronome |
 | `ableton_get_session_snapshot` | Get tempo, playback state, scene count, and indexed track names |
+| `ableton_get_sounding_snapshot` | Conversation-resume anchor: mute/solo/playing slot, device chain, clip presence grid, scene names |
 | `ableton_get_track_names` | List track names |
 | `ableton_get_track_devices` | List devices on a track |
 | `ableton_create_midi_track` | Create a MIDI track |
 | `ableton_create_audio_track` | Create an audio track |
+| `ableton_duplicate_track` | Duplicate a track (clips + devices); confirms via track count |
+| `ableton_delete_track` | Delete a track (requires `confirm=true`; preview via `ableton_preview_destructive`) |
 | `ableton_set_track_name` | Rename a track |
 | `ableton_mute_track` / `ableton_solo_track` | Mute/solo |
 | `ableton_arm_track` | Arm/disarm for recording |
@@ -313,9 +359,10 @@ finished arrangement.
 | `ableton_get_clip_notes` / `ableton_add_midi_notes` / `ableton_clear_clip_notes` | MIDI notes |
 | `ableton_humanize_clip` | Add microtiming, velocity variation, and optional swing to clip notes |
 | `ableton_match_clip_tempo` | Enable Warp on an audio clip so it follows the project tempo (`beats` or `complex`) |
-| `ableton_analyze_local_audio` | Analyze a local `.wav` (duration, levels, BPM, approx. key/scale + chords + section map + texture: brightness/dynamics/stereo width). Rejects URLs; no melody/note extraction |
-| `ableton_analyze_audio_url` | Reference-analyze an `http(s)`/YouTube URL (tempo/length/levels, approx. key/scale + chords + section map + texture). Streams the full track via yt-dlp+ffmpeg in memory, saves nothing; requires yt-dlp+ffmpeg |
+| `ableton_analyze_local_audio` | Analyze a local `.wav` (BPM/key alternatives, density, rms_per_beat, band_balance, match_axes, sections, onset grid, texture). Rejects URLs; no melody/note extraction |
+| `ableton_analyze_audio_url` | Reference-analyze an `http(s)`/YouTube URL (same production fields as local, minus the full onset list). Streams via yt-dlp+ffmpeg in memory; requires yt-dlp+ffmpeg |
 | `ableton_compare_ab_variation` | Preferred A/B entry: create one drum/bass/scene variation, audition A→B, return a preference prompt |
+| `ableton_compare_fx_bypass` | Same-clip FX A/B: bypass audio/MIDI effects (dry) then restore prior active state (wet); record with `instrument=fx variation=bypass` |
 | `ableton_create_drum_variation` | Create-only drum A/B variation (groove / density / fill); use when you do not want audition yet |
 | `ableton_create_bass_variation` | Create-only bass A/B variation (octave / staccato / groove) |
 | `ableton_create_scene_energy_variation` | Create-only scene energy variation (lift / pullback); keeps B if fire fails |
@@ -323,10 +370,41 @@ finished arrangement.
 | `ableton_record_variation_preference` | Save whether the source or variation matched your taste (drum, bass, scene, or mix) |
 | `ableton_get_taste_profile` | Summarize saved A/B choices and suggest the next comparison |
 | `ableton_fire_clip_slot` / `ableton_stop_clip` | Fire/stop a clip |
-| `ableton_duplicate_clip_to` | Duplicate clip to another slot |
+| `ableton_duplicate_clip_to` | Duplicate clip to another slot (same track, or cross-track via `target_track_index`) |
+| `ableton_delete_clip` | Delete a clip from a slot (requires `confirm=true` when a clip is present) |
 | `ableton_set_clip_name` | Rename a clip |
+| `ableton_get_clip_properties` | Get a clip's edit state: pitch/transpose, detune, warp mode, gain, markers, loop (audio + MIDI) |
+| `ableton_set_clip_pitch` | Transpose (semitones) and/or detune (cents) an audio clip |
+| `ableton_set_clip_warp` | Set an audio clip's warping on/off and warp mode (Beats/Tones/Texture/Re-Pitch/Complex/REX/Complex Pro) |
+| `ableton_set_clip_region` | Set a clip's start/end markers and loop points (beats) |
+| `ableton_extract_clip_region` | Copy a region `[start_beats, end_beats]` of an audio clip into an empty slot as a new clip (non-destructive chop) |
+| `ableton_get_clip_envelope` | Sample a Session clip automation envelope (volume/pan/send/device); Live 11 cannot list breakpoints (requires browser patch) |
+| `ableton_set_clip_envelope_steps` | Write Session clip automation steps; creates envelope if needed (requires browser patch) |
+| `ableton_clear_clip_envelope` | Clear one or all Session clip envelopes (`confirm=true`; requires browser patch) |
+| `ableton_chop_draft` | Generate a MIDI draft that rearranges chop slices without reproducing the source order (`avoid_copy`); apply with `ableton_add_midi_notes` |
 | `ableton_fire_scene` | Fire a scene |
-| `ableton_get_device_parameters` / `ableton_set_device_parameter` | Device parameters |
+| `ableton_get_scene_names` | List scene names with indices |
+| `ableton_set_scene_name` | Rename a scene (e.g. Intro, Verse, Hook) |
+| `ableton_create_named_scenes` | Append empty named scenes for section structure |
+| `ableton_set_scene_clip_presence` | Subtractive arrangement: hide (delete) or restore clips on a scene row from a source scene |
+| `ableton_get_device_parameters` | Device parameters, with human-readable `display_value` (units/enum names) and `is_quantized` (requires browser patch) |
+| `ableton_set_device_parameter` | Set a device parameter by raw numeric value |
+| `ableton_set_device_parameter_string` | Set a device parameter from a display string (e.g. `Ins`, `180 Hz`, `-3.5 dB`, `50 %`); requires browser patch |
+| `ableton_delete_device` | Delete a device (requires `confirm=true`); confirms with device name and before/after count (requires browser patch) |
+| `ableton_get_simpler` | Get Simpler state: playback/slicing mode, style, beat division, slice count, with readable names (requires browser patch) |
+| `ableton_set_simpler_playback_mode` | Set Simpler playback mode: classic / one_shot / slicing (requires browser patch) |
+| `ableton_set_simpler_slicing` | Set Simpler slicing style and/or beat division (requires browser patch) |
+| `ableton_get_simpler_slices` | Get Simpler slice map: start in samples/seconds + default C1-based MIDI note (requires browser patch) |
+| `ableton_save_slice_preset` | Save a Simpler's slice map to a reusable JSON preset (requires browser patch) |
+| `ableton_load_slice_preset` | Restore a saved slice preset onto the same sample; guards by sample length (requires browser patch) |
+| `ableton_list_slice_presets` | List saved slice presets |
+| `ableton_apply_device_intent` | Apply human-readable parameter settings (e.g. HP 180 Hz) to a device in one call, resolving params by name; optionally save/load named intents (requires browser patch) |
+| `ableton_list_intents` | List saved device intents |
+| `ableton_duplicate_track_for_processing` | Duplicate a track into a dry/wet pair (original stays dry, copy becomes processed) |
+| `ableton_get_return_tracks` | List return tracks (A/B/…) with send indices (requires browser patch) |
+| `ableton_create_return_track` | Create a new return track |
+| `ableton_get_track_sends` / `ableton_set_track_send` | Get/set send amounts to returns (~0..1; ~0.85 ≈ 0 dB) |
+| `ableton_get_device_sidechain` / `ableton_set_device_sidechain` | Compressor sidechain input routing (Live 11+; requires browser patch) |
 | `ableton_find_browser_item` | Search Live Browser (requires patch) |
 | `ableton_list_browser_folder` | List Browser roots or folder children (requires patch) |
 | `ableton_load_browser_item` | Load Drum Rack / instrument onto a track by name |

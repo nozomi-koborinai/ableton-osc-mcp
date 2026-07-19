@@ -17,9 +17,10 @@ type StopClipInput struct {
 }
 
 type DuplicateClipToInput struct {
-	TrackIndex      int `json:"track_index" jsonschema:"minimum=0"`
-	ClipIndex       int `json:"clip_index" jsonschema:"minimum=0"`
-	TargetClipIndex int `json:"target_clip_index" jsonschema:"description=Target clip slot index to duplicate to,minimum=0"`
+	TrackIndex       int  `json:"track_index" jsonschema:"minimum=0"`
+	ClipIndex        int  `json:"clip_index" jsonschema:"minimum=0"`
+	TargetClipIndex  int  `json:"target_clip_index" jsonschema:"description=Target clip slot (scene) index to duplicate to,minimum=0"`
+	TargetTrackIndex *int `json:"target_track_index,omitempty" jsonschema:"description=Target track index; omit to duplicate within the same track,minimum=0"`
 }
 
 type SetClipNameInput struct {
@@ -48,8 +49,9 @@ type FiredOutput struct {
 }
 
 type ClearClipNotesInput struct {
-	TrackIndex int `json:"track_index" jsonschema:"minimum=0"`
-	ClipIndex  int `json:"clip_index" jsonschema:"minimum=0"`
+	TrackIndex int  `json:"track_index" jsonschema:"minimum=0"`
+	ClipIndex  int  `json:"clip_index" jsonschema:"minimum=0"`
+	Confirm    bool `json:"confirm,omitempty" jsonschema:"description=Must be true to execute; omit/false returns a preview error without clearing"`
 }
 
 type ClearedOutput struct {
@@ -231,9 +233,14 @@ func NewAbletonFireClipSlot(g *genkit.Genkit, client *abletonosc.Client) ai.Tool
 }
 
 func NewAbletonClearClipNotes(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
-	return genkit.DefineTool(g, "ableton_clear_clip_notes", "Ableton Live: clear all notes in a clip",
+	return genkit.DefineTool(g, "ableton_clear_clip_notes",
+		"Ableton Live: clear all notes in a clip. Requires confirm=true. Prefer ableton_preview_destructive with action=clear_clip_notes first.",
 		func(_ *ai.ToolContext, input ClearClipNotesInput) (ClearedOutput, error) {
 			if err := validateTrackClipIndices(input.TrackIndex, input.ClipIndex); err != nil {
+				return ClearedOutput{}, err
+			}
+			if err := requireConfirm(input.Confirm, "clear_clip_notes",
+				fmt.Sprintf("all notes in clip [%d,%d]", input.TrackIndex, input.ClipIndex)); err != nil {
 				return ClearedOutput{}, err
 			}
 			// AbletonOSC: Passing only (track_index, clip_index) clears all notes.
@@ -312,7 +319,8 @@ func NewAbletonStopClip(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
 }
 
 func NewAbletonDuplicateClipTo(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
-	return genkit.DefineTool(g, "ableton_duplicate_clip_to", "Ableton Live: duplicate clip to another slot",
+	return genkit.DefineTool(g, "ableton_duplicate_clip_to",
+		"Ableton Live: duplicate a clip to another slot (same track by default, or cross-track when target_track_index is set)",
 		func(_ *ai.ToolContext, input DuplicateClipToInput) (SentOutput, error) {
 			if err := validateTrackClipIndices(input.TrackIndex, input.ClipIndex); err != nil {
 				return SentOutput{}, err
@@ -320,9 +328,17 @@ func NewAbletonDuplicateClipTo(g *genkit.Genkit, client *abletonosc.Client) ai.T
 			if input.TargetClipIndex < 0 {
 				return SentOutput{}, errors.New("target_clip_index must be >= 0")
 			}
+			targetTrack := input.TrackIndex
+			if input.TargetTrackIndex != nil {
+				if *input.TargetTrackIndex < 0 {
+					return SentOutput{}, errors.New("target_track_index must be >= 0")
+				}
+				targetTrack = *input.TargetTrackIndex
+			}
 			if err := client.Send("/live/clip_slot/duplicate_clip_to",
 				int32(input.TrackIndex),
 				int32(input.ClipIndex),
+				int32(targetTrack),
 				int32(input.TargetClipIndex),
 			); err != nil {
 				return SentOutput{}, err

@@ -111,6 +111,7 @@ func createBassVariation(client variationClient, input CreateBassVariationInput)
 		"/live/clip_slot/duplicate_clip_to",
 		int32(input.TrackIndex),
 		int32(input.SourceClipIndex),
+		int32(input.TrackIndex),
 		int32(input.TargetClipIndex),
 	); err != nil {
 		return CreateBassVariationOutput{}, fmt.Errorf("duplicate source clip: %w", err)

@@ -13,8 +13,8 @@ import (
 )
 
 type RecordVariationPreferenceInput struct {
-	Instrument string `json:"instrument" jsonschema:"description=Comparison family: drum, bass, scene, or mix"`
-	Variation  string `json:"variation" jsonschema:"description=Variation that was compared (e.g. groove, lift, volume)"`
+	Instrument string `json:"instrument" jsonschema:"description=Comparison family: drum, bass, scene, mix, or fx"`
+	Variation  string `json:"variation" jsonschema:"description=Variation that was compared (e.g. groove, lift, volume, bypass)"`
 	Preferred  string `json:"preferred" jsonschema:"description=Which version you preferred: source or variation"`
 	Note       string `json:"note,omitempty" jsonschema:"description=Optional short reason for the choice (max 500 characters)"`
 }
@@ -47,11 +47,11 @@ type tasteStore interface {
 	Path() string
 }
 
-var tasteInstrumentOrder = []string{"bass", "drum", "mix", "scene"}
+var tasteInstrumentOrder = []string{"bass", "drum", "fx", "mix", "scene"}
 
 func NewAbletonRecordVariationPreference(g *genkit.Genkit, store tasteStore) ai.Tool {
 	return genkit.DefineTool(g, "ableton_record_variation_preference",
-		"Ableton Live: after an A/B listen, record whether source or variation matched your taste (drum, bass, scene, or mix) — usually follows ableton_compare_ab_variation or a mix compare",
+		"Ableton Live: after an A/B listen, record whether source or variation matched your taste (drum, bass, scene, mix, or fx) — usually follows ableton_compare_ab_variation, mix compare, or ableton_compare_fx_bypass",
 		func(_ *ai.ToolContext, input RecordVariationPreferenceInput) (TasteProfileOutput, error) {
 			preference, err := validateTastePreference(input)
 			if err != nil {
@@ -127,8 +127,12 @@ func validateTasteInstrumentVariation(instrument, variation string) error {
 		if !isMixVariation(variation) {
 			return errors.New("mix variation must be volume")
 		}
+	case "fx":
+		if !isFXVariation(variation) {
+			return errors.New("fx variation must be bypass")
+		}
 	default:
-		return errors.New("instrument must be drum, bass, scene, or mix")
+		return errors.New("instrument must be drum, bass, scene, mix, or fx")
 	}
 	return nil
 }
@@ -139,6 +143,10 @@ func isSceneVariation(variation string) bool {
 
 func isMixVariation(variation string) bool {
 	return variation == "volume"
+}
+
+func isFXVariation(variation string) bool {
+	return variation == "bypass"
 }
 
 func tasteProfileOutput(profile taste.Profile, path string) TasteProfileOutput {
@@ -230,6 +238,8 @@ func tasteVariationsFor(instrument string) []string {
 		return []string{"lift", "pullback"}
 	case "mix":
 		return []string{"volume"}
+	case "fx":
+		return []string{"bypass"}
 	default:
 		return nil
 	}

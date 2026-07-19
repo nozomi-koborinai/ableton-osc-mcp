@@ -20,29 +20,45 @@ const (
 	maxAnalyzeSamples = 44100 * 60 // analyze at most 60s of audio
 )
 
+// Onset marks a detected transient in the sample. Beat is relative to the start
+// of the analyzed audio at the estimated tempo (or the project tempo when BPM
+// detection fails). Strength is normalized 0..1 against the loudest onset.
+type Onset struct {
+	Beat     float64 `json:"beat"`
+	Sec      float64 `json:"sec"`
+	Strength float64 `json:"strength"`
+}
+
 type Result struct {
-	Path              string         `json:"path"`
-	Format            string         `json:"format"`
-	DurationSec       float64        `json:"duration_sec"`
-	SampleRate        int            `json:"sample_rate"`
-	Channels          int            `json:"channels"`
-	PeakLevel         float64        `json:"peak_level"`
-	RMSLevel          float64        `json:"rms_level"`
-	EstimatedBPM      float64        `json:"estimated_bpm"`
-	BPMConfidence     float64        `json:"bpm_confidence"`
-	OnsetCount        int            `json:"onset_count"`
-	SuggestedWarpMode string         `json:"suggested_warp_mode"`
-	Key               string         `json:"key,omitempty"`
-	Scale             string         `json:"scale,omitempty"`
-	KeyConfidence     float64        `json:"key_confidence,omitempty"`
-	ChordProgression  []ChordSegment `json:"chord_progression,omitempty"`
-	ChordSummary      string         `json:"chord_summary,omitempty"`
-	Sections          []Section      `json:"sections,omitempty"`
-	BrightnessHz      float64        `json:"brightness_hz,omitempty"`
-	CrestFactorDB     float64        `json:"crest_factor_db,omitempty"`
-	StereoWidth       float64        `json:"stereo_width"`
-	LengthBarsAtBPM   float64        `json:"length_bars_at_project_tempo,omitempty"`
-	Note              string         `json:"note"`
+	Path              string            `json:"path"`
+	Format            string            `json:"format"`
+	DurationSec       float64           `json:"duration_sec"`
+	SampleRate        int               `json:"sample_rate"`
+	Channels          int               `json:"channels"`
+	PeakLevel         float64           `json:"peak_level"`
+	RMSLevel          float64           `json:"rms_level"`
+	EstimatedBPM      float64           `json:"estimated_bpm"`
+	BPMConfidence     float64           `json:"bpm_confidence"`
+	BPMAlternatives   []TempoHypothesis `json:"bpm_alternatives,omitempty"`
+	OnsetCount        int               `json:"onset_count"`
+	Onsets            []Onset           `json:"onsets,omitempty"`
+	RhythmDensity     float64           `json:"rhythm_density,omitempty" jsonschema:"description=Onsets per bar at estimated BPM"`
+	RMSPerBeat        []float64         `json:"rms_per_beat,omitempty" jsonschema:"description=RMS level per beat for chop/energy decisions"`
+	BandBalance       *BandBalance      `json:"band_balance,omitempty"`
+	SuggestedWarpMode string            `json:"suggested_warp_mode"`
+	Key               string            `json:"key,omitempty"`
+	Scale             string            `json:"scale,omitempty"`
+	KeyConfidence     float64           `json:"key_confidence,omitempty"`
+	KeyAlternatives   []KeyHypothesis   `json:"key_alternatives,omitempty"`
+	ChordProgression  []ChordSegment    `json:"chord_progression,omitempty"`
+	ChordSummary      string            `json:"chord_summary,omitempty"`
+	Sections          []Section         `json:"sections,omitempty"`
+	MatchAxes         []MatchAxis       `json:"match_axes,omitempty" jsonschema:"description=Three production axes to match when referencing this audio"`
+	BrightnessHz      float64           `json:"brightness_hz,omitempty"`
+	CrestFactorDB     float64           `json:"crest_factor_db,omitempty"`
+	StereoWidth       float64           `json:"stereo_width"`
+	LengthBarsAtBPM   float64           `json:"length_bars_at_project_tempo,omitempty"`
+	Note              string            `json:"note"`
 }
 
 // AnalyzeFile analyzes a local WAV file already present on disk. It never
@@ -78,7 +94,7 @@ func AnalyzeFile(path string, projectTempo float64) (Result, error) {
 		return Result{}, err
 	}
 	out.Path = abs
-	out.Note = "Local-file analysis only. No download, transcription, or note extraction. Use results to place/warp a sample you already have rights to use."
+	out.Note = "Local-file analysis only. No download, transcription, or melody/note extraction — use onsets, rms_per_beat, band_balance, sections, and match_axes for placement decisions."
 	return out, nil
 }
 
@@ -103,7 +119,8 @@ func analyzeWAVStream(r io.Reader, projectTempo float64) (Result, error) {
 		analyze = analyze[:maxAnalyzeSamples]
 	}
 	bpm, confidence := estimateBPM(analyze, sampleRate)
-	onsets := countOnsets(analyze, sampleRate)
+	onsetList := detectOnsets(analyze, sampleRate)
+	onsets := len(onsetList)
 	warpMode := "beats"
 	if duration >= 8 || onsets < 8 {
 		warpMode = "complex"
@@ -118,6 +135,7 @@ func analyzeWAVStream(r io.Reader, projectTempo float64) (Result, error) {
 		RMSLevel:          rms,
 		EstimatedBPM:      bpm,
 		BPMConfidence:     confidence,
+		BPMAlternatives:   bpmAlternatives(bpm, confidence),
 		OnsetCount:        onsets,
 		SuggestedWarpMode: warpMode,
 	}
@@ -125,6 +143,15 @@ func analyzeWAVStream(r io.Reader, projectTempo float64) (Result, error) {
 		out.Key = key.Tonic
 		out.Scale = key.Scale
 		out.KeyConfidence = key.Confidence
+		alts := []KeyHypothesis{{
+			Tonic: key.Tonic, Scale: key.Scale, Confidence: key.Confidence, Label: "primary",
+		}}
+		if key.AltTonic != "" {
+			alts = append(alts, KeyHypothesis{
+				Tonic: key.AltTonic, Scale: key.AltScale, Confidence: key.AltConfidence, Label: "alternative",
+			})
+		}
+		out.KeyAlternatives = alts
 	}
 	if chords, summary, ok := estimateChords(analyze, sampleRate); ok {
 		out.ChordProgression = chords
@@ -139,6 +166,24 @@ func analyzeWAVStream(r io.Reader, projectTempo float64) (Result, error) {
 	out.BrightnessHz = tex.BrightnessHz
 	out.CrestFactorDB = tex.CrestFactorDB
 	out.StereoWidth = tex.StereoWidth
+	bands := BandBalance{}
+	if b, ok := estimateBandBalance(analyze, sampleRate); ok {
+		bands = b
+		out.BandBalance = &b
+	}
+	beatBPM := bpm
+	if beatBPM <= 0 {
+		beatBPM = projectTempo
+	}
+	if beatBPM > 0 {
+		for i := range onsetList {
+			onsetList[i].Beat = round2(onsetList[i].Sec * beatBPM / 60.0)
+		}
+		out.RMSPerBeat = rmsEnvelopePerBeat(analyze, sampleRate, beatBPM)
+		out.RhythmDensity = rhythmDensityOnsetsPerBar(onsets, duration, beatBPM)
+	}
+	out.Onsets = onsetList
+	out.MatchAxes = buildMatchAxes(out.RhythmDensity, bands, tex.StereoWidth, tex.CrestFactorDB)
 	if projectTempo > 0 && duration > 0 {
 		beats := duration * (projectTempo / 60)
 		out.LengthBarsAtBPM = beats / 4
@@ -441,10 +486,15 @@ func energyEnvelope(samples []float64, hop int) []float64 {
 	return out
 }
 
-func countOnsets(samples []float64, sampleRate int) int {
+const maxOnsets = 512
+
+// detectOnsets finds transients via peaks in the energy envelope. Each onset
+// carries its time in seconds and a strength normalized 0..1 against the loudest
+// peak. Beat is filled in by the caller once tempo is known.
+func detectOnsets(samples []float64, sampleRate int) []Onset {
 	env := energyEnvelope(samples, envelopeHop)
 	if len(env) < 3 {
-		return 0
+		return nil
 	}
 	var mean float64
 	for _, v := range env {
@@ -452,16 +502,32 @@ func countOnsets(samples []float64, sampleRate int) int {
 	}
 	mean /= float64(len(env))
 	threshold := mean * 1.5
-	count := 0
-	armed := true
-	minGap := int(math.Round(0.08 / (float64(envelopeHop) / float64(sampleRate)))) // ~80ms
+	hopSec := float64(envelopeHop) / float64(sampleRate)
+	minGap := int(math.Round(0.08 / hopSec)) // ~80ms
 	if minGap < 1 {
 		minGap = 1
 	}
+	var onsets []Onset
+	var maxStrength float64
+	armed := true
 	last := -minGap
+	// The first frame has no predecessor; treat a loud opening as an onset so a
+	// transient at time 0 is not missed.
+	if env[0] > threshold {
+		onsets = append(onsets, Onset{Sec: 0, Strength: env[0]})
+		maxStrength = env[0]
+		last = 0
+		armed = false
+	}
 	for i := 1; i < len(env)-1; i++ {
 		if armed && env[i] > threshold && env[i] >= env[i-1] && env[i] >= env[i+1] && i-last >= minGap {
-			count++
+			onsets = append(onsets, Onset{
+				Sec:      round2(float64(i) * hopSec),
+				Strength: env[i],
+			})
+			if env[i] > maxStrength {
+				maxStrength = env[i]
+			}
 			last = i
 			armed = false
 		}
@@ -469,7 +535,15 @@ func countOnsets(samples []float64, sampleRate int) int {
 			armed = true
 		}
 	}
-	return count
+	if maxStrength > 0 {
+		for i := range onsets {
+			onsets[i].Strength = round2(onsets[i].Strength / maxStrength)
+		}
+	}
+	if len(onsets) > maxOnsets {
+		onsets = onsets[:maxOnsets]
+	}
+	return onsets
 }
 
 func round1(v float64) float64 {
