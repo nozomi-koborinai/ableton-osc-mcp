@@ -46,10 +46,6 @@ func wrapActionable(err error, code, next string) error {
 	return &ActionableError{Code: code, Message: err.Error(), NextStep: next}
 }
 
-func formatActionable(code, message, next string) string {
-	return actionable(code, message, next).Error()
-}
-
 // requireConfirm returns a preview-style actionable error when confirm is false.
 func requireConfirm(confirm bool, action string, summary string) error {
 	if confirm {
