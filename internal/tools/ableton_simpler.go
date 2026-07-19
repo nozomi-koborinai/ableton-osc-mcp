@@ -59,7 +59,7 @@ func simplerStatusError(status string) error {
 	case "not_simpler":
 		return errors.New("device is not a Simpler (OriginalSimpler)")
 	case "no_sample":
-		return errors.New("Simpler has no sample loaded")
+		return errors.New("simpler has no sample loaded")
 	default:
 		return fmt.Errorf("simpler op failed: status=%s", status)
 	}

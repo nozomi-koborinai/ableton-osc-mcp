@@ -194,11 +194,7 @@ func NewAbletonSetTrackSend(g *genkit.Genkit, client *abletonosc.Client) ai.Tool
 			}
 			res, err := client.Query("/live/track/get/send", int32(input.TrackIndex), int32(input.SendIndex))
 			if err != nil {
-				return SetTrackSendOutput{
-					TrackIndex: input.TrackIndex,
-					SendIndex:  input.SendIndex,
-					Value:      input.Value,
-				}, nil
+				return SetTrackSendOutput(input), nil
 			}
 			if err := ensureResponseLen(res, 3); err != nil {
 				return SetTrackSendOutput{}, err
