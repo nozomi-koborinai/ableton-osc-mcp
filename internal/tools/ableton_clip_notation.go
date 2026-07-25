@@ -95,6 +95,10 @@ type ClipWriteOutput struct {
 	NotesWritten int                 `json:"notes_written"`
 	Verified     bool                `json:"verified"`
 	Mismatches   []notation.Mismatch `json:"mismatches,omitempty"`
+	// Normalized lists notes that had to be shortened because another note of the
+	// same pitch started before they ended. Live enforces this itself; doing it
+	// here keeps what was asked for and what got stored the same thing.
+	Normalized []notation.Adjustment `json:"normalized,omitempty"`
 }
 
 func NewAbletonClipWrite(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
@@ -111,12 +115,24 @@ func writeClipNotation(client clipNotationClient, input ClipWriteInput) (ClipWri
 		return ClipWriteOutput{}, err
 	}
 
-	// Stage one: the notation has to be readable before Live is touched at all.
+	// Stage one: the notation has to be readable, and it has to describe a state
+	// Live can hold. Both are settled before Live is touched at all.
 	wanted, err := notation.Parse(input.Notation)
 	if err != nil {
 		return ClipWriteOutput{}, actionable("notation_parse_error", err.Error(),
 			"Fix the notation and send it again. Nothing was changed in Live.")
 	}
+	beatsPerBar, err := notation.BeatsPerBar(wanted.SigNum, wanted.SigDen)
+	if err != nil {
+		return ClipWriteOutput{}, actionable("notation_parse_error", err.Error(),
+			"Fix the sig in the header and send it again. Nothing was changed in Live.")
+	}
+	normalizedNotes, normalized, err := notation.Normalize(wanted.Notes, beatsPerBar)
+	if err != nil {
+		return ClipWriteOutput{}, actionable("overlapping_notes", err.Error(),
+			"Remove one of the two notes or move it, then send the notation again. Nothing was changed in Live.")
+	}
+	wanted.Notes = normalizedNotes
 
 	// Stage two: the header's signature has to be the song's. Positions are counted
 	// in bars and beats, so notation written against another signature puts every
@@ -139,11 +155,6 @@ func writeClipNotation(client clipNotationClient, input ClipWriteInput) (ClipWri
 
 	track, clip := int32(input.TrackIndex), int32(input.ClipIndex)
 	hasClip, err := queryBool(client, "/live/clip_slot/get/has_clip", track, clip)
-	if err != nil {
-		return ClipWriteOutput{}, err
-	}
-
-	beatsPerBar, err := notation.BeatsPerBar(wanted.SigNum, wanted.SigDen)
 	if err != nil {
 		return ClipWriteOutput{}, err
 	}
@@ -230,6 +241,7 @@ func writeClipNotation(client clipNotationClient, input ClipWriteInput) (ClipWri
 		NotesWritten: len(wanted.Notes),
 		Verified:     len(mismatches) == 0,
 		Mismatches:   mismatches,
+		Normalized:   normalized,
 	}, nil
 }
 
