@@ -81,6 +81,139 @@ func readClipNotation(client clipNotationClient, input ClipReadInput) (ClipReadO
 	}, nil
 }
 
+type ClipWriteInput struct {
+	TrackIndex int    `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
+	ClipIndex  int    `json:"clip_index" jsonschema:"description=Clip slot index (0-based; same row as the scene),minimum=0"`
+	Notation   string `json:"notation" jsonschema:"description=Full clip notation text. This replaces every note in the clip\\, so send the whole clip\\, not just the part you changed."`
+	Rev        string `json:"rev" jsonschema:"description=The rev returned by ableton_clip_read for this clip. Leave empty only to create a clip in an empty slot."`
+}
+
+type ClipWriteOutput struct {
+	TrackIndex   int                 `json:"track_index"`
+	ClipIndex    int                 `json:"clip_index"`
+	Rev          string              `json:"rev"`
+	NotesWritten int                 `json:"notes_written"`
+	Verified     bool                `json:"verified"`
+	Mismatches   []notation.Mismatch `json:"mismatches,omitempty"`
+}
+
+func NewAbletonClipWrite(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
+	return genkit.DefineTool(g, "ableton_clip_write",
+		"Ableton Live: replace every note in a MIDI clip from clip notation text. Read the clip first with ableton_clip_read and pass its rev back; the write is refused if the clip changed in the meantime. Reads the clip again afterwards and reports whether it came back identical.",
+		func(_ *ai.ToolContext, input ClipWriteInput) (ClipWriteOutput, error) {
+			return writeClipNotation(client, input)
+		},
+	)
+}
+
+func writeClipNotation(client clipNotationClient, input ClipWriteInput) (ClipWriteOutput, error) {
+	if err := validateTrackClipIndices(input.TrackIndex, input.ClipIndex); err != nil {
+		return ClipWriteOutput{}, err
+	}
+
+	// Stage one: the notation has to be readable before Live is touched at all.
+	wanted, err := notation.Parse(input.Notation)
+	if err != nil {
+		return ClipWriteOutput{}, actionable("notation_parse_error", err.Error(),
+			"Fix the notation and send it again. Nothing was changed in Live.")
+	}
+
+	track, clip := int32(input.TrackIndex), int32(input.ClipIndex)
+	hasClip, err := queryBool(client, "/live/clip_slot/get/has_clip", track, clip)
+	if err != nil {
+		return ClipWriteOutput{}, err
+	}
+
+	beatsPerBar, err := notation.BeatsPerBar(wanted.SigNum, wanted.SigDen)
+	if err != nil {
+		return ClipWriteOutput{}, err
+	}
+
+	if input.Rev == "" {
+		// Creating: there is nothing to compare against, so stages two and three
+		// do not apply. Refuse if a clip is already there rather than replacing it.
+		if hasClip {
+			return ClipWriteOutput{}, actionable("clip_exists",
+				fmt.Sprintf("slot [%d,%d] already holds a clip", input.TrackIndex, input.ClipIndex),
+				"Read the clip with ableton_clip_read to get its rev, then write with that rev.")
+		}
+		length := float64(wanted.Bars) * beatsPerBar
+		if length <= 0 {
+			return ClipWriteOutput{}, actionable("notation_parse_error",
+				"bars must be at least 1 when creating a clip",
+				"Set bars= in the header to the length you want.")
+		}
+		if err := client.Send("/live/clip_slot/create_clip", track, clip, float32(length)); err != nil {
+			return ClipWriteOutput{}, err
+		}
+	} else {
+		if !hasClip {
+			return ClipWriteOutput{}, actionable("clip_not_found",
+				fmt.Sprintf("no clip in slot [%d,%d]", input.TrackIndex, input.ClipIndex),
+				"Send rev as an empty string to create the clip.")
+		}
+		// Stage two: refuse if the clip moved under us.
+		current, err := loadClipForNotation(client, input.TrackIndex, input.ClipIndex)
+		if err != nil {
+			return ClipWriteOutput{}, err
+		}
+		currentText, err := notation.Format(current)
+		if err != nil {
+			return ClipWriteOutput{}, err
+		}
+		if got := notation.Rev(currentText); got != input.Rev {
+			return ClipWriteOutput{}, actionable("rev_mismatch",
+				fmt.Sprintf("clip [%d,%d] changed since it was read (rev %s, now %s)",
+					input.TrackIndex, input.ClipIndex, input.Rev, got),
+				"Read the clip again with ableton_clip_read and redo the edit on top of it.")
+		}
+		// Stage three: the header has to describe the clip that is actually there.
+		if current.Bars != wanted.Bars {
+			return ClipWriteOutput{}, actionable("bars_mismatch",
+				fmt.Sprintf("notation says bars=%d but the clip is %d bars", wanted.Bars, current.Bars),
+				"Read the clip again and keep the bars value it reports.")
+		}
+	}
+
+	// Stage four: replace the notes wholesale, then the name.
+	if err := client.Send("/live/clip/remove/notes", track, clip); err != nil {
+		return ClipWriteOutput{}, err
+	}
+	if len(wanted.Notes) > 0 {
+		args := []interface{}{track, clip}
+		for _, n := range wanted.Notes {
+			args = append(args, int32(n.Pitch), float32(n.StartTime), float32(n.Duration), int32(n.Velocity), n.Mute)
+		}
+		if err := client.Send("/live/clip/add/notes", args...); err != nil {
+			return ClipWriteOutput{}, err
+		}
+	}
+	if err := client.Send("/live/clip/set/name", track, clip, wanted.Name); err != nil {
+		return ClipWriteOutput{}, err
+	}
+
+	// Read it back and check. This is what makes "the round trip closes" a claim
+	// that gets tested on every single write rather than once at design time.
+	after, err := loadClipForNotation(client, input.TrackIndex, input.ClipIndex)
+	if err != nil {
+		return ClipWriteOutput{}, err
+	}
+	afterText, err := notation.Format(after)
+	if err != nil {
+		return ClipWriteOutput{}, err
+	}
+	mismatches := notation.Diff(wanted.Notes, after.Notes)
+
+	return ClipWriteOutput{
+		TrackIndex:   input.TrackIndex,
+		ClipIndex:    input.ClipIndex,
+		Rev:          notation.Rev(afterText),
+		NotesWritten: len(wanted.Notes),
+		Verified:     len(mismatches) == 0,
+		Mismatches:   mismatches,
+	}, nil
+}
+
 // loadClipForNotation gathers everything the notation header and note lines need.
 func loadClipForNotation(client clipNotationClient, trackIndex, clipIndex int) (notation.Clip, error) {
 	track, clip := int32(trackIndex), int32(clipIndex)
