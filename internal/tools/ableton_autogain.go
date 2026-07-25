@@ -32,7 +32,7 @@ type AutogainTracksInput struct {
 
 type AutogainTrackResult struct {
 	TrackIndex   int     `json:"track_index"`
-	Status       string  `json:"status" jsonschema:"description=ok, silent, unchanged, capped, or partial"`
+	Status       string  `json:"status" jsonschema:"description=ok\\, silent\\, unchanged\\, capped\\, or partial"`
 	VolumeBefore float64 `json:"volume_before"`
 	VolumeAfter  float64 `json:"volume_after"`
 	MeterBefore  float64 `json:"meter_before"`

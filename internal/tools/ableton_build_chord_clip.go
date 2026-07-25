@@ -27,7 +27,7 @@ type chordClipClient interface {
 type BuildChordClipInput struct {
 	TrackIndex    int      `json:"track_index" jsonschema:"description=Existing MIDI track index to write into,minimum=0"`
 	ClipIndex     int      `json:"clip_index" jsonschema:"description=Empty clip slot index to fill,minimum=0"`
-	Progression   string   `json:"progression" jsonschema:"description=Chord names separated by space/comma/pipe (e.g. 'C G Am F' or 'C | G | Am | F'). Supports m, dim, aug, 7, maj7, m7, sus2, sus4, 5. Use N.C. or - for a rest."`
+	Progression   string   `json:"progression" jsonschema:"description=Chord names separated by space/comma/pipe (e.g. 'C G Am F' or 'C | G | Am | F'). Supports m\\, dim\\, aug\\, 7\\, maj7\\, m7\\, sus2\\, sus4\\, 5. Use N.C. or - for a rest."`
 	BeatsPerChord *float64 `json:"beats_per_chord,omitempty" jsonschema:"description=Beats each chord lasts (default 4 = one bar in 4/4),minimum=0.25,maximum=16"`
 	RootOctave    *int     `json:"root_octave,omitempty" jsonschema:"description=Octave of the chord roots (default 4; C4=MIDI 60),minimum=0,maximum=8"`
 	Velocity      *int     `json:"velocity,omitempty" jsonschema:"description=Note velocity (default 90),minimum=1,maximum=127"`

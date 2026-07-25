@@ -12,11 +12,11 @@ import (
 )
 
 type PreviewDestructiveInput struct {
-	Action       string `json:"action" jsonschema:"description=One of: delete_track, delete_clip, delete_device, clear_clip_notes, clear_scene_clips"`
-	TrackIndex   *int   `json:"track_index,omitempty" jsonschema:"minimum=0"`
-	DeviceIndex  *int   `json:"device_index,omitempty" jsonschema:"minimum=0"`
-	ClipIndex    *int   `json:"clip_index,omitempty" jsonschema:"minimum=0"`
-	SceneIndex   *int   `json:"scene_index,omitempty" jsonschema:"minimum=0"`
+	Action       string `json:"action" jsonschema:"description=One of: delete_track\\, delete_clip\\, delete_device\\, clear_clip_notes\\, clear_scene_clips"`
+	TrackIndex   *int   `json:"track_index,omitempty" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
+	DeviceIndex  *int   `json:"device_index,omitempty" jsonschema:"description=Device index on the track (0-based; from ableton_get_track_devices),minimum=0"`
+	ClipIndex    *int   `json:"clip_index,omitempty" jsonschema:"description=Clip slot index (0-based; same row as the scene),minimum=0"`
+	SceneIndex   *int   `json:"scene_index,omitempty" jsonschema:"description=Scene index (0-based),minimum=0"`
 	TrackIndices []int  `json:"track_indices,omitempty" jsonschema:"description=For clear_scene_clips: tracks to affect; omit = all"`
 }
 

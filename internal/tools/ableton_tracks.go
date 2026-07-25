@@ -11,17 +11,17 @@ import (
 )
 
 type SetTrackNameInput struct {
-	TrackIndex int    `json:"track_index" jsonschema:"minimum=0"`
+	TrackIndex int    `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
 	Name       string `json:"name" jsonschema:"description=New track name"`
 }
 
 type TrackBoolInput struct {
-	TrackIndex int  `json:"track_index" jsonschema:"minimum=0"`
+	TrackIndex int  `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
 	Value      bool `json:"value" jsonschema:"description=true to enable; false to disable"`
 }
 
 type SetTrackVolumeInput struct {
-	TrackIndex int     `json:"track_index" jsonschema:"minimum=0"`
+	TrackIndex int     `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
 	Volume     float64 `json:"volume" jsonschema:"description=Volume (0.0=silence to 1.0=0dB),minimum=0,maximum=1"`
 }
 
@@ -35,7 +35,7 @@ type TrackNamesOutput struct {
 }
 
 type TrackDevicesInput struct {
-	TrackIndex int `json:"track_index" jsonschema:"minimum=0"`
+	TrackIndex int `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
 }
 
 type TrackDevice struct {

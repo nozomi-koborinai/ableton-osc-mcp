@@ -115,7 +115,7 @@ type TrackSend struct {
 }
 
 type GetTrackSendsInput struct {
-	TrackIndex int `json:"track_index" jsonschema:"minimum=0"`
+	TrackIndex int `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
 }
 
 type GetTrackSendsOutput struct {
@@ -169,8 +169,8 @@ func NewAbletonGetTrackSends(g *genkit.Genkit, client *abletonosc.Client) ai.Too
 }
 
 type SetTrackSendInput struct {
-	TrackIndex int     `json:"track_index" jsonschema:"minimum=0"`
-	SendIndex  int     `json:"send_index" jsonschema:"description=Return index (0=A, 1=B, …),minimum=0"`
+	TrackIndex int     `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
+	SendIndex  int     `json:"send_index" jsonschema:"description=Return index (0=A\\, 1=B\\, …),minimum=0"`
 	Value      float64 `json:"value" jsonschema:"description=Normalized send amount (~0..1; ~0.85 ≈ 0 dB)"`
 }
 
@@ -215,7 +215,7 @@ func NewAbletonSetTrackSend(g *genkit.Genkit, client *abletonosc.Client) ai.Tool
 // --- Device sidechain (Compressor input routing) ---
 
 type DeviceSidechainInput struct {
-	TrackIndex  int `json:"track_index" jsonschema:"minimum=0"`
+	TrackIndex  int `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
 	DeviceIndex int `json:"device_index" jsonschema:"description=Usually a Compressor (or other device with Sidechain input routing),minimum=0"`
 }
 
@@ -368,9 +368,9 @@ func NewAbletonGetDeviceSidechain(g *genkit.Genkit, client *abletonosc.Client) a
 }
 
 type SetDeviceSidechainInput struct {
-	TrackIndex     int    `json:"track_index" jsonschema:"minimum=0"`
-	DeviceIndex    int    `json:"device_index" jsonschema:"minimum=0"`
-	RoutingType    string `json:"routing_type,omitempty" jsonschema:"description=Sidechain source track name (from available_types), e.g. the kick track"`
+	TrackIndex     int    `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
+	DeviceIndex    int    `json:"device_index" jsonschema:"description=Device index on the track (0-based; from ableton_get_track_devices),minimum=0"`
+	RoutingType    string `json:"routing_type,omitempty" jsonschema:"description=Sidechain source track name (from available_types)\\, e.g. the kick track"`
 	RoutingChannel string `json:"routing_channel,omitempty" jsonschema:"description=Optional channel within the source (from available_channels)"`
 }
 

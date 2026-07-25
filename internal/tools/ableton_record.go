@@ -17,12 +17,12 @@ type CreateAudioTrackInput struct {
 }
 
 type ArmTrackInput struct {
-	TrackIndex int  `json:"track_index" jsonschema:"minimum=0"`
+	TrackIndex int  `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
 	Armed      bool `json:"armed" jsonschema:"description=true to arm; false to disarm"`
 }
 
 type SetInputRoutingInput struct {
-	TrackIndex  int    `json:"track_index" jsonschema:"minimum=0"`
+	TrackIndex  int    `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
 	RoutingType string `json:"routing_type" jsonschema:"description=Input routing type display name (e.g. Resampling)"`
 }
 
@@ -33,7 +33,7 @@ type InputRoutingOutput struct {
 }
 
 type SetMonitoringInput struct {
-	TrackIndex int `json:"track_index" jsonschema:"minimum=0"`
+	TrackIndex int `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
 	State      int `json:"state" jsonschema:"description=0=In 1=Auto 2=Off,minimum=0,maximum=2"`
 }
 
@@ -46,7 +46,7 @@ type SessionRecordOutput struct {
 }
 
 type BounceSessionPassInput struct {
-	SceneIndices []int  `json:"scene_indices,omitempty" jsonschema:"description=Scene indices to fire in order (default Intro/Verse/Hook/Bridge/Hook = 2,1,0,3,0)"`
+	SceneIndices []int  `json:"scene_indices,omitempty" jsonschema:"description=Scene indices to fire in order (default Intro/Verse/Hook/Bridge/Hook = 2\\,1\\,0\\,3\\,0)"`
 	BarsPerScene int    `json:"bars_per_scene,omitempty" jsonschema:"description=Bars to wait after each scene fire (default 4),minimum=1,maximum=64"`
 	TrackName    string `json:"track_name,omitempty" jsonschema:"description=Bounce destination track name (default Bounce)"`
 }

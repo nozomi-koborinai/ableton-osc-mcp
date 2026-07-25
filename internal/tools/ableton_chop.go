@@ -23,8 +23,8 @@ type ChopDraftInput struct {
 	NumSlices int      `json:"num_slices" jsonschema:"description=Number of available slices/pads to arrange,minimum=1,maximum=128"`
 	BaseNote  *int     `json:"base_note,omitempty" jsonschema:"description=MIDI note for slice 0 (default 36 = C1),minimum=0,maximum=127"`
 	Bars      *int     `json:"bars,omitempty" jsonschema:"description=Pattern length in bars (default 1),minimum=1,maximum=16"`
-	Grid      string   `json:"grid,omitempty" jsonschema:"description=Step grid: 1/4, 1/8, 1/16 (default), or 1/32"`
-	Density   *float64 `json:"density,omitempty" jsonschema:"description=Fraction of steps that get a hit, 0..1 (default 0.5)"`
+	Grid      string   `json:"grid,omitempty" jsonschema:"description=Step grid: 1/4\\, 1/8\\, 1/16 (default)\\, or 1/32"`
+	Density   *float64 `json:"density,omitempty" jsonschema:"description=Fraction of steps that get a hit\\, 0..1 (default 0.5)"`
 	AvoidCopy *bool    `json:"avoid_copy,omitempty" jsonschema:"description=Avoid reproducing the source's original slice order (default true)"`
 	Seed      *int64   `json:"seed,omitempty" jsonschema:"description=Random seed for a reproducible draft"`
 }

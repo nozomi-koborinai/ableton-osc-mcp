@@ -31,7 +31,7 @@ type AuditionABInput struct {
 	Cycles         *int   `json:"cycles,omitempty" jsonschema:"description=How many A→B cycles to play (default 1),minimum=1,maximum=4"`
 	BeatsPerBar    *int   `json:"beats_per_bar,omitempty" jsonschema:"description=Override beats per bar (default: Live signature numerator),minimum=1,maximum=16"`
 	Instrument     string `json:"instrument,omitempty" jsonschema:"description=Optional taste family for the preference prompt: drum or bass for clips; scene for scenes"`
-	Variation      string `json:"variation,omitempty" jsonschema:"description=Optional variation that was compared (e.g. groove, lift) for the preference prompt"`
+	Variation      string `json:"variation,omitempty" jsonschema:"description=Optional variation that was compared (e.g. groove\\, lift) for the preference prompt"`
 	StartPlayback  bool   `json:"start_playback,omitempty" jsonschema:"description=Start Live playback before the audition (also auto-starts when transport is stopped)"`
 	StopAfter      bool   `json:"stop_after,omitempty" jsonschema:"description=Stop playback after the final B version"`
 }

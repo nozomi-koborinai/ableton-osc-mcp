@@ -13,15 +13,15 @@ import (
 )
 
 type GetDeviceParametersInput struct {
-	TrackIndex  int `json:"track_index" jsonschema:"minimum=0"`
-	DeviceIndex int `json:"device_index" jsonschema:"minimum=0"`
+	TrackIndex  int `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
+	DeviceIndex int `json:"device_index" jsonschema:"description=Device index on the track (0-based; from ableton_get_track_devices),minimum=0"`
 }
 
 type DeviceParameter struct {
 	Index        int     `json:"index"`
 	Name         string  `json:"name"`
 	Value        float64 `json:"value"`
-	DisplayValue string  `json:"display_value,omitempty" jsonschema:"description=Human-readable value with units or enum name (e.g. 37.0 Hz, 1/2, Ins); requires the browser patch"`
+	DisplayValue string  `json:"display_value,omitempty" jsonschema:"description=Human-readable value with units or enum name (e.g. 37.0 Hz\\, 1/2\\, Ins); requires the browser patch"`
 	Min          float64 `json:"min"`
 	Max          float64 `json:"max"`
 	IsQuantized  *bool   `json:"is_quantized,omitempty" jsonschema:"description=true for stepped/enum parameters such as filter type or mix mode"`
@@ -34,8 +34,8 @@ type DeviceParametersOutput struct {
 }
 
 type SetDeviceParameterInput struct {
-	TrackIndex     int     `json:"track_index" jsonschema:"minimum=0"`
-	DeviceIndex    int     `json:"device_index" jsonschema:"minimum=0"`
+	TrackIndex     int     `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
+	DeviceIndex    int     `json:"device_index" jsonschema:"description=Device index on the track (0-based; from ableton_get_track_devices),minimum=0"`
 	ParameterIndex int     `json:"parameter_index" jsonschema:"description=Parameter index (from get_device_parameters),minimum=0"`
 	Value          float64 `json:"value" jsonschema:"description=Parameter value to set"`
 }
@@ -177,17 +177,17 @@ func NewAbletonSetDeviceParameter(g *genkit.Genkit, client *abletonosc.Client) a
 }
 
 type SetDeviceParameterStringInput struct {
-	TrackIndex     int    `json:"track_index" jsonschema:"minimum=0"`
-	DeviceIndex    int    `json:"device_index" jsonschema:"minimum=0"`
+	TrackIndex     int    `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
+	DeviceIndex    int    `json:"device_index" jsonschema:"description=Device index on the track (0-based; from ableton_get_track_devices),minimum=0"`
 	ParameterIndex int    `json:"parameter_index" jsonschema:"description=Parameter index (from get_device_parameters),minimum=0"`
-	Value          string `json:"value" jsonschema:"description=Human-readable value: enum name (e.g. Ins) or numeric with unit (e.g. 180 Hz, -3.5 dB, 50 %)"`
+	Value          string `json:"value" jsonschema:"description=Human-readable value: enum name (e.g. Ins) or numeric with unit (e.g. 180 Hz\\, -3.5 dB\\, 50 %)"`
 }
 
 type SetDeviceParameterStringOutput struct {
 	TrackIndex     int      `json:"track_index"`
 	DeviceIndex    int      `json:"device_index"`
 	ParameterIndex int      `json:"parameter_index"`
-	Status         string   `json:"status" jsonschema:"description=set, or no_match / invalid_* on failure"`
+	Status         string   `json:"status" jsonschema:"description=set\\, or no_match / invalid_* on failure"`
 	Value          float64  `json:"value,omitempty" jsonschema:"description=Resolved numeric value when status is set"`
 	DisplayValue   string   `json:"display_value,omitempty" jsonschema:"description=Resolved human-readable value when status is set"`
 	Options        []string `json:"options,omitempty" jsonschema:"description=Available enum options when status is no_match"`
@@ -276,7 +276,7 @@ func NewAbletonSetDeviceParameterString(g *genkit.Genkit, client *abletonosc.Cli
 }
 
 type DeleteDeviceInput struct {
-	TrackIndex  int  `json:"track_index" jsonschema:"minimum=0"`
+	TrackIndex  int  `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
 	DeviceIndex int  `json:"device_index" jsonschema:"description=Device index on the track (from get_track_devices),minimum=0"`
 	Confirm     bool `json:"confirm,omitempty" jsonschema:"description=Must be true to execute; omit/false returns a preview error without deleting. Prefer ableton_preview_destructive first."`
 }
@@ -284,7 +284,7 @@ type DeleteDeviceInput struct {
 type DeleteDeviceOutput struct {
 	TrackIndex    int    `json:"track_index"`
 	DeviceIndex   int    `json:"device_index"`
-	Status        string `json:"status" jsonschema:"description=deleted, or invalid_track_index / invalid_device_index / error on failure"`
+	Status        string `json:"status" jsonschema:"description=deleted\\, or invalid_track_index / invalid_device_index / error on failure"`
 	DeviceName    string `json:"device_name,omitempty" jsonschema:"description=Name of the deleted device"`
 	DevicesBefore *int   `json:"devices_before,omitempty" jsonschema:"description=Device count before deletion"`
 	DevicesAfter  *int   `json:"devices_after,omitempty" jsonschema:"description=Device count after deletion; confirms success"`

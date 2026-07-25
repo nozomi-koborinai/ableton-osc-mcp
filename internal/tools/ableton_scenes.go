@@ -10,7 +10,7 @@ import (
 )
 
 type FireSceneInput struct {
-	SceneIndex int `json:"scene_index" jsonschema:"minimum=0"`
+	SceneIndex int `json:"scene_index" jsonschema:"description=Scene index (0-based),minimum=0"`
 }
 
 func NewAbletonFireScene(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {

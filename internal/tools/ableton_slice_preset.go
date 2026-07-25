@@ -126,8 +126,8 @@ func sendSimplerSetSlices(client *abletonosc.Client, track, device int, slices [
 }
 
 type SaveSlicePresetInput struct {
-	TrackIndex  int    `json:"track_index" jsonschema:"minimum=0"`
-	DeviceIndex int    `json:"device_index" jsonschema:"minimum=0"`
+	TrackIndex  int    `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
+	DeviceIndex int    `json:"device_index" jsonschema:"description=Device index on the track (0-based; from ableton_get_track_devices),minimum=0"`
 	Name        string `json:"name" jsonschema:"description=Preset name (stored as JSON under the app config dir)"`
 }
 
@@ -193,8 +193,8 @@ func NewAbletonSaveSlicePreset(g *genkit.Genkit, client *abletonosc.Client) ai.T
 }
 
 type LoadSlicePresetInput struct {
-	TrackIndex  int    `json:"track_index" jsonschema:"minimum=0"`
-	DeviceIndex int    `json:"device_index" jsonschema:"minimum=0"`
+	TrackIndex  int    `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
+	DeviceIndex int    `json:"device_index" jsonschema:"description=Device index on the track (0-based; from ableton_get_track_devices),minimum=0"`
 	Name        string `json:"name" jsonschema:"description=Preset name to restore"`
 	Force       *bool  `json:"force,omitempty" jsonschema:"description=Apply even if the loaded sample length differs from the preset (default false)"`
 }
