@@ -32,7 +32,7 @@ type ClipReadOutput struct {
 
 func NewAbletonClipRead(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
 	return genkit.DefineTool(g, "ableton_clip_read",
-		"Ableton Live: read a MIDI clip as clip notation text plus a rev fingerprint. The notation carries every note in the clip (position, pitch, length, velocity, mute) and is the only way to inspect or change note content. Pass the rev back to ableton_clip_write.",
+		"Ableton Live: read a MIDI clip as clip notation text plus a rev fingerprint. The notation carries every note in the clip (position, pitch, length, velocity, mute) and is the only way to inspect or change note content. What it returns is exactly the format ableton_clip_write accepts, so edit the text and send it back with the same rev. See ableton_clip_write for the format itself.",
 		func(_ *ai.ToolContext, input ClipReadInput) (ClipReadOutput, error) {
 			return readClipNotation(client, input)
 		},
@@ -84,8 +84,8 @@ func readClipNotation(client clipNotationClient, input ClipReadInput) (ClipReadO
 type ClipWriteInput struct {
 	TrackIndex int    `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
 	ClipIndex  int    `json:"clip_index" jsonschema:"description=Clip slot index (0-based; same row as the scene),minimum=0"`
-	Notation   string `json:"notation" jsonschema:"description=Full clip notation text. This replaces every note in the clip\\, so send the whole clip\\, not just the part you changed."`
-	Rev        string `json:"rev" jsonschema:"description=The rev returned by ableton_clip_read for this clip. Leave empty only to create a clip in an empty slot."`
+	Notation   string `json:"notation" jsonschema:"description=Full clip notation text\\, whose format is described in this tool's description. It replaces every note in the clip\\, so send the whole clip\\, not just the part you changed."`
+	Rev        string `json:"rev" jsonschema:"description=The rev returned by ableton_clip_read for this clip. Send an empty string only to create a clip in an empty slot; send the field either way."`
 }
 
 type ClipWriteOutput struct {
@@ -103,7 +103,26 @@ type ClipWriteOutput struct {
 
 func NewAbletonClipWrite(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
 	return genkit.DefineTool(g, "ableton_clip_write",
-		"Ableton Live: replace every note in a MIDI clip from clip notation text. Read the clip first with ableton_clip_read and pass its rev back; the write is refused if the clip changed in the meantime. Reads the clip again afterwards and reports whether it came back identical.",
+		"Ableton Live: replace every note in a MIDI clip from clip notation text.\n"+
+			"\n"+
+			"Read the clip first with ableton_clip_read and pass its rev back; the write is refused if the clip changed in the meantime. Afterwards it reads the clip again and reports whether it came back identical. Leave rev empty only to create a clip in an empty slot, where bars sets the new clip's length.\n"+
+			"\n"+
+			"The notation is a header line, a blank line, then one line per note:\n"+
+			"\n"+
+			"  clip \"Hook\" bars=2 sig=4/4\n"+
+			"\n"+
+			"    1:1 C3 1/8 v100\n"+
+			"    1:3.5 D#3 1/8. v88 -\n"+
+			"    2:1 G3 0.333333 v104\n"+
+			"\n"+
+			"The header names the clip, and that name is written to the clip on every successful write — so when editing an existing clip, carry its name back unchanged or you will rename it.\n"+
+			"A beat is always a quarter note. That is how Live counts clip time whatever the signature says, so a bar of 4/4 is four beats and a bar of 6/8 is three.\n"+
+			"Position is BAR:BEAT with both counting from 1, and the beat may be fractional: 2:1.5 is bar 2, beat 1.5.\n"+
+			"Pitch is a note name in Live's own octave numbering, where MIDI 60 is C3 (not C4). Sharps only: write D#3, never Eb3.\n"+
+			"Length is a note value — 1/1 1/2 1/4 1/8 1/16 1/32, with a trailing dot for dotted, so 1/8. is a dotted eighth. Anything those cannot express exactly, triplets included, is written as a decimal count of beats. So 1/1 is four beats and 1/8 is half a beat, in every signature; a full bar of 3/4 is three beats, written 1/2. as a dotted half.\n"+
+			"Velocity is v1 to v127. A trailing - marks a muted note. Fields are separated by spaces and extra spacing is ignored, so columns may be aligned.\n"+
+			"A line whose first non-space character is # is a comment.\n"+
+			"sig must match the song's time signature and bars must match the clip's real length, or the write is refused. Two notes of the same pitch may not overlap; the earlier one is shortened to end where the next begins, and every such change is reported back. Ending exactly where the next one begins is not an overlap and is left alone, so a run of repeated notes needs no gap.",
 		func(_ *ai.ToolContext, input ClipWriteInput) (ClipWriteOutput, error) {
 			return writeClipNotation(client, input)
 		},
