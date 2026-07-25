@@ -145,6 +145,53 @@ func TestWriteClipNotationRejectsBadNotationBeforeTouchingLive(t *testing.T) {
 	}
 }
 
+func TestWriteClipNotationNormalizesOverlappingNotes(t *testing.T) {
+	// A pushed hi-hat running into the straight one behind it. Live would shorten
+	// it on arrival; doing it here first means the write asks for what Live will
+	// actually hold, so the verification afterwards still means something.
+	stub := newReadStub()
+	current, err := readClipNotation(stub, ClipReadInput{})
+	if err != nil {
+		t.Fatalf("read error = %v", err)
+	}
+	stub.notesAfterWrite = []interface{}{
+		42, 0.0, 0.25, 104, false,
+		42, 0.262, 0.238, 68, false,
+		42, 0.5, 0.25, 86, false,
+	}
+	text := "clip \"Chorus Lead\" bars=4 sig=4/4\n\n" +
+		"  1:1 F#1 1/16 v104\n" +
+		"  1:1.262 F#1 1/16 v68\n" +
+		"  1:1.5 F#1 1/16 v86\n"
+
+	out, err := writeClipNotation(stub, ClipWriteInput{Notation: text, Rev: current.Rev})
+	if err != nil {
+		t.Fatalf("write error = %v", err)
+	}
+	if !out.Verified {
+		t.Errorf("expected the write to verify, mismatches = %+v", out.Mismatches)
+	}
+	if len(out.Normalized) != 1 {
+		t.Fatalf("Normalized = %+v, want exactly one", out.Normalized)
+	}
+	if out.Normalized[0].PitchName != "F#1" {
+		t.Errorf("Normalized[0] = %+v, want the pushed F#1", out.Normalized[0])
+	}
+}
+
+func TestWriteClipNotationRejectsNotesStackedAtOnePosition(t *testing.T) {
+	stub := newReadStub()
+	text := "clip \"Chorus Lead\" bars=4 sig=4/4\n\n" +
+		"  1:1 F#1 1/16 v104\n" +
+		"  1:1 F#1 1/8 v68\n"
+
+	_, err := writeClipNotation(stub, ClipWriteInput{Notation: text, Rev: "irrelevant"})
+	assertActionable(t, err, "overlapping_notes")
+	if len(stub.sends) != 0 {
+		t.Errorf("nothing should have been sent to Live, got %v", stub.sends)
+	}
+}
+
 func TestWriteClipNotationRejectsSignatureMismatch(t *testing.T) {
 	// Positions are counted in bars and beats, so notation written against a
 	// different signature lands every note somewhere else. The note comparison

@@ -21,6 +21,12 @@ import (
 //
 // The target slot must be empty; the clip it creates is removed at the end.
 // Override the target with ABLETON_LIVE_TEST_TRACK and ABLETON_LIVE_TEST_SLOT.
+//
+// No instance of this MCP server may be running at the same time. AbletonOSC
+// always replies to 127.0.0.1:11001, so only one process can receive answers,
+// and a running server holds that port. Stop the server (or the editor hosting
+// it) before running these, or the connection fails with "address already in
+// use".
 func TestLiveClipNotationRoundTrip(t *testing.T) {
 	client, track, slot := liveTestTarget(t)
 
@@ -88,6 +94,62 @@ func TestLiveClipNotationRoundTrip(t *testing.T) {
 		TrackIndex: track, ClipIndex: slot, Notation: edited, Rev: read.Rev,
 	})
 	assertActionable(t, err, "rev_mismatch")
+}
+
+// TestLiveClipNotationHumanizedHatsVerify is the pattern that first exposed the
+// overlap problem: a drill hi-hat line with pushed 16ths, where six notes ran
+// into the note behind them and Live silently shortened all six. The write now
+// applies Live's rule first, so what gets asked for is what gets stored and the
+// verification comes back clean with the shortening reported.
+func TestLiveClipNotationHumanizedHatsVerify(t *testing.T) {
+	client, track, slot := liveTestTarget(t)
+
+	text := "clip \"Drill Hats\" bars=1 sig=4/4\n\n" +
+		"  1:1 C1 1/8 v112\n" +
+		"  1:1 F#1 1/16 v104\n" +
+		"  1:1.262 F#1 1/16 v68\n" +
+		"  1:1.5 F#1 1/16 v86\n" +
+		"  1:1.758 F#1 1/16 v66\n" +
+		"  1:2 F#1 1/16 v98\n" +
+		"  1:2.264 F#1 1/16 v70\n" +
+		"  1:2.5 F#1 1/16 v84\n" +
+		"  1:2.752 F#1 1/16 v64\n" +
+		"  1:3 D1 1/8 v106\n" +
+		"  1:3 F#1 1/16 v100\n" +
+		"  1:3.258 F#1 1/16 v72\n" +
+		"  1:3.5 F#1 1/16 v88\n" +
+		"  1:3.756 F#1 1/16 v66\n" +
+		"  1:3.75 C1 1/16 v96\n" +
+		"  1:4 F#1 0.166667 v94\n" +
+		"  1:4.166667 F#1 0.166667 v62\n" +
+		"  1:4.333333 F#1 0.166667 v76\n" +
+		"  1:4.5 F#1 0.166667 v66\n" +
+		"  1:4.666667 F#1 0.166667 v82\n" +
+		"  1:4.833333 F#1 0.166667 v70\n"
+
+	out, err := writeClipNotation(client, ClipWriteInput{
+		TrackIndex: track, ClipIndex: slot, Notation: text, Rev: "",
+	})
+	if err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	defer func() {
+		if err := client.Send("/live/clip_slot/delete_clip", int32(track), int32(slot)); err != nil {
+			t.Logf("WARN could not remove the probe clip at [%d,%d]: %v", track, slot, err)
+		}
+	}()
+
+	if !out.Verified {
+		t.Errorf("humanized hats did not verify: %+v", out.Mismatches)
+	}
+	if len(out.Normalized) != 6 {
+		t.Errorf("Normalized = %d entries, want 6: %+v", len(out.Normalized), out.Normalized)
+	}
+	for _, a := range out.Normalized {
+		if a.PitchName != "F#1" {
+			t.Errorf("only the pushed hats should have been shortened, got %+v", a)
+		}
+	}
 }
 
 // TestLiveClipNotationToleranceHolds writes positions far into a long clip, where
