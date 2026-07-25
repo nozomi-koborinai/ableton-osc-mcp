@@ -6,13 +6,14 @@ import (
 )
 
 // Adjustment records one note the notation had to shorten to match what Live
-// will actually store.
+// will actually store. Every field is written the way the notation writes it, so
+// the report can be read against the text that produced it.
 type Adjustment struct {
-	Position    string  `json:"position"`
-	Pitch       int     `json:"pitch"`
-	PitchName   string  `json:"pitch_name"`
-	WasDuration float64 `json:"was_duration"`
-	NowDuration float64 `json:"now_duration"`
+	Position    string `json:"position"`
+	Pitch       int    `json:"pitch"`
+	PitchName   string `json:"pitch_name"`
+	WasDuration string `json:"was_duration"`
+	NowDuration string `json:"now_duration"`
 }
 
 // Normalize applies Live's rule that two notes of the same pitch cannot overlap:
@@ -31,7 +32,10 @@ type Adjustment struct {
 // Two notes of one pitch starting at one position cannot be resolved by
 // shortening — it would leave a note of no length — and picking a survivor would
 // be guesswork, so that returns an error instead.
-func Normalize(notes []Note) ([]Note, []Adjustment, error) {
+//
+// Adjustments come back grouped by pitch and ordered by time within each pitch,
+// which reads as "these hats got shortened" rather than as a scatter.
+func Normalize(notes []Note, beatsPerBar float64) ([]Note, []Adjustment, error) {
 	out := append([]Note(nil), notes...)
 
 	// Index by pitch so each pitch is walked along its own timeline. Comparing
@@ -65,7 +69,7 @@ func Normalize(notes []Note) ([]Note, []Adjustment, error) {
 				}
 				return nil, nil, fmt.Errorf(
 					"two %s notes start at the same position (%s); remove one or move it",
-					name, formatBeats(cur.StartTime))
+					name, FormatPosition(cur.StartTime, beatsPerBar))
 			}
 			overrun := cur.Duration - gap
 			if overrun <= BeatTolerance {
@@ -76,21 +80,15 @@ func Normalize(notes []Note) ([]Note, []Adjustment, error) {
 				name = fmt.Sprintf("pitch %d", pitch)
 			}
 			adjusted = append(adjusted, Adjustment{
-				Position:    formatBeats(cur.StartTime),
+				Position:    FormatPosition(cur.StartTime, beatsPerBar),
 				Pitch:       pitch,
 				PitchName:   name,
-				WasDuration: cur.Duration,
-				NowDuration: gap,
+				WasDuration: FormatDuration(cur.Duration),
+				NowDuration: FormatDuration(gap),
 			})
 			cur.Duration = gap
 		}
 	}
 
-	sort.SliceStable(adjusted, func(a, b int) bool {
-		if adjusted[a].Position != adjusted[b].Position {
-			return adjusted[a].Position < adjusted[b].Position
-		}
-		return adjusted[a].Pitch < adjusted[b].Pitch
-	})
 	return out, adjusted, nil
 }

@@ -14,7 +14,7 @@ func TestNormalizeShortensOverlappingSamePitch(t *testing.T) {
 		{Pitch: 42, StartTime: 0.262, Duration: 0.25, Velocity: 68},
 		{Pitch: 42, StartTime: 0.5, Duration: 0.25, Velocity: 86},
 	}
-	got, adjusted, err := Normalize(notes)
+	got, adjusted, err := Normalize(notes, 4)
 	if err != nil {
 		t.Fatalf("Normalize error = %v", err)
 	}
@@ -24,8 +24,11 @@ func TestNormalizeShortensOverlappingSamePitch(t *testing.T) {
 	if math.Abs(got[1].Duration-0.238) > 1e-9 {
 		t.Errorf("shortened duration = %v, want 0.238", got[1].Duration)
 	}
-	if adjusted[0].Pitch != 42 || math.Abs(adjusted[0].WasDuration-0.25) > 1e-9 {
-		t.Errorf("adjustment = %+v", adjusted[0])
+	// The report has to speak the notation's own language, so a reader can find
+	// the line it is talking about.
+	want := Adjustment{Position: "1:1.262", Pitch: 42, PitchName: "F#1", WasDuration: "1/16", NowDuration: "0.238"}
+	if adjusted[0] != want {
+		t.Errorf("adjustment = %+v, want %+v", adjusted[0], want)
 	}
 	// The notes that did not overlap must come through untouched.
 	if got[0].Duration != 0.25 || got[2].Duration != 0.25 {
@@ -41,7 +44,7 @@ func TestNormalizeLeavesChordsAlone(t *testing.T) {
 		{Pitch: 63, StartTime: 0, Duration: 4, Velocity: 88},
 		{Pitch: 67, StartTime: 0, Duration: 4, Velocity: 86},
 	}
-	got, adjusted, err := Normalize(notes)
+	got, adjusted, err := Normalize(notes, 4)
 	if err != nil {
 		t.Fatalf("Normalize error = %v", err)
 	}
@@ -61,7 +64,7 @@ func TestNormalizeLeavesTouchingNotesAlone(t *testing.T) {
 		{Pitch: 42, StartTime: 0, Duration: 0.5, Velocity: 100},
 		{Pitch: 42, StartTime: 0.5, Duration: 0.5, Velocity: 100},
 	}
-	_, adjusted, err := Normalize(notes)
+	_, adjusted, err := Normalize(notes, 4)
 	if err != nil {
 		t.Fatalf("Normalize error = %v", err)
 	}
@@ -77,7 +80,7 @@ func TestNormalizeIgnoresOverrunsInsideTolerance(t *testing.T) {
 		{Pitch: 42, StartTime: 0, Duration: 0.5 + BeatTolerance/2, Velocity: 100},
 		{Pitch: 42, StartTime: 0.5, Duration: 0.5, Velocity: 100},
 	}
-	_, adjusted, err := Normalize(notes)
+	_, adjusted, err := Normalize(notes, 4)
 	if err != nil {
 		t.Fatalf("Normalize error = %v", err)
 	}
@@ -91,7 +94,7 @@ func TestNormalizeRejectsSamePitchSameStart(t *testing.T) {
 		{Pitch: 42, StartTime: 1.5, Duration: 0.5, Velocity: 100},
 		{Pitch: 42, StartTime: 1.5, Duration: 0.25, Velocity: 80},
 	}
-	_, _, err := Normalize(notes)
+	_, _, err := Normalize(notes, 4)
 	if err == nil {
 		t.Fatal("expected an error for two notes of one pitch at one position")
 	}
@@ -110,7 +113,7 @@ func TestNormalizeHandlesManyPitchesIndependently(t *testing.T) {
 		{Pitch: 42, StartTime: 0.5, Duration: 0.5, Velocity: 100},
 		{Pitch: 36, StartTime: 0.75, Duration: 0.5, Velocity: 100},
 	}
-	got, adjusted, err := Normalize(notes)
+	got, adjusted, err := Normalize(notes, 4)
 	if err != nil {
 		t.Fatalf("Normalize error = %v", err)
 	}
@@ -142,7 +145,7 @@ func TestNormalizeDoesNotMutateInput(t *testing.T) {
 		{Pitch: 42, StartTime: 0, Duration: 0.5, Velocity: 100},
 		{Pitch: 42, StartTime: 0.25, Duration: 0.5, Velocity: 100},
 	}
-	if _, _, err := Normalize(notes); err != nil {
+	if _, _, err := Normalize(notes, 4); err != nil {
 		t.Fatalf("Normalize error = %v", err)
 	}
 	if notes[0].Duration != 0.5 {

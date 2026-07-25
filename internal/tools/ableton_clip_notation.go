@@ -122,7 +122,12 @@ func writeClipNotation(client clipNotationClient, input ClipWriteInput) (ClipWri
 		return ClipWriteOutput{}, actionable("notation_parse_error", err.Error(),
 			"Fix the notation and send it again. Nothing was changed in Live.")
 	}
-	normalizedNotes, normalized, err := notation.Normalize(wanted.Notes)
+	beatsPerBar, err := notation.BeatsPerBar(wanted.SigNum, wanted.SigDen)
+	if err != nil {
+		return ClipWriteOutput{}, actionable("notation_parse_error", err.Error(),
+			"Fix the sig in the header and send it again. Nothing was changed in Live.")
+	}
+	normalizedNotes, normalized, err := notation.Normalize(wanted.Notes, beatsPerBar)
 	if err != nil {
 		return ClipWriteOutput{}, actionable("overlapping_notes", err.Error(),
 			"Remove one of the two notes or move it, then send the notation again. Nothing was changed in Live.")
@@ -150,11 +155,6 @@ func writeClipNotation(client clipNotationClient, input ClipWriteInput) (ClipWri
 
 	track, clip := int32(input.TrackIndex), int32(input.ClipIndex)
 	hasClip, err := queryBool(client, "/live/clip_slot/get/has_clip", track, clip)
-	if err != nil {
-		return ClipWriteOutput{}, err
-	}
-
-	beatsPerBar, err := notation.BeatsPerBar(wanted.SigNum, wanted.SigDen)
 	if err != nil {
 		return ClipWriteOutput{}, err
 	}
