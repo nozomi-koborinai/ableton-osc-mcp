@@ -26,6 +26,3 @@ func toMCPTool(def *ai.ToolDefinition) (mcp.Tool, error) {
 	tool.Annotations = annotationsFor(def.Name)
 	return tool, nil
 }
-
-// TEMPORARY: replaced by annotations.go in Task 4.
-func annotationsFor(string) mcp.ToolAnnotation { return mcp.ToolAnnotation{} }
