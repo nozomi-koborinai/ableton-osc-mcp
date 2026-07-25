@@ -12,7 +12,7 @@ This enables AI assistants (Claude, Cursor, etc.) to interact with Ableton Live 
 
 - Control Ableton Live from AI assistants via MCP
 - Create MIDI tracks and clips
-- Add, read, and clear MIDI notes
+- Read and write MIDI clip contents as clip notation — one text format covering position, pitch, length, velocity and mute, with a stale-edit check and a round-trip check on every write
 - Get/set tempo
 - Inspect tempo, playback state, scenes, and indexed tracks in one snapshot
 - List devices on a track
@@ -23,7 +23,6 @@ This enables AI assistants (Claude, Cursor, etc.) to interact with Ableton Live 
 - Run drum / bass / scene A/B comparisons through one create→audition recipe, then save taste locally
 - A/B the same clip dry vs processed by bypassing FX (`ableton_compare_fx_bypass`)
 - Compare mix balance with snapshots you can restore
-- Humanize MIDI clips with microtiming, velocity variation, and swing
 - Match an audio clip to the project tempo with Warp (e.g. after loading a sample)
 - Analyze a local `.wav`, or reference-analyze an `http(s)`/YouTube URL, for duration, levels, BPM/key alternatives, chords, section map, rhythm density, rms_per_beat, band balance, match axes, and texture (URL streams in memory and is never saved; no melody extraction)
 - Autogain tracks toward a target meter level while audio is playing
@@ -270,7 +269,7 @@ Keep the lower-level tools for special cases:
 
 | When you need… | Use |
 |---|---|
-| Create B without auditioning yet | `ableton_create_drum_variation` / `ableton_create_bass_variation` / `ableton_create_scene_energy_variation` |
+| Create B without auditioning yet | `ableton_create_scene_energy_variation` |
 | Audition clips/scenes that already exist | `ableton_audition_ab` |
 | Mix balance A/B (volume deltas + restore) | `ableton_apply_mix_variation` → listen → record preference → `ableton_restore_mix_snapshot` |
 
@@ -325,10 +324,9 @@ service, and you are responsible for your right to use any source you analyze.
 Use results with files you have rights to use, then load into Live and call
 `ableton_match_clip_tempo` if needed.
 
-To turn a reference into a starting point, pass a `chord_summary` (or your own
-progression like `C | G | Am | F`) to `ableton_build_chord_clip`, which writes a
-block-chord MIDI clip into a MIDI track you can build on. It is a sketch, not a
-finished arrangement.
+To turn a reference into a starting point, write the progression as clip
+notation and send it with `ableton_clip_write`. A chord is just several notes
+sharing a position, so a block-chord sketch is a few lines of text.
 
 ## Available Tools
 
@@ -355,16 +353,12 @@ finished arrangement.
 | `ableton_get_track_input_routing` / `ableton_set_track_input_routing` | Input routing (e.g. Resampling) |
 | `ableton_set_monitoring` | Monitoring state (0=In 1=Auto 2=Off) |
 | `ableton_set_track_volume` | Set track volume |
-| `ableton_create_clip` | Create a clip in a slot |
-| `ableton_get_clip_notes` / `ableton_add_midi_notes` / `ableton_clear_clip_notes` | MIDI notes |
-| `ableton_humanize_clip` | Add microtiming, velocity variation, and optional swing to clip notes |
+| `ableton_clip_read` / `ableton_clip_write` | Read and replace a MIDI clip's notes as clip notation |
 | `ableton_match_clip_tempo` | Enable Warp on an audio clip so it follows the project tempo (`beats` or `complex`) |
 | `ableton_analyze_local_audio` | Analyze a local `.wav` (BPM/key alternatives, density, rms_per_beat, band_balance, match_axes, sections, onset grid, texture). Rejects URLs; no melody/note extraction |
 | `ableton_analyze_audio_url` | Reference-analyze an `http(s)`/YouTube URL (same production fields as local, minus the full onset list). Streams via yt-dlp+ffmpeg in memory; requires yt-dlp+ffmpeg |
 | `ableton_compare_ab_variation` | Preferred A/B entry: create one drum/bass/scene variation, audition A→B, return a preference prompt |
 | `ableton_compare_fx_bypass` | Same-clip FX A/B: bypass audio/MIDI effects (dry) then restore prior active state (wet); record with `instrument=fx variation=bypass` |
-| `ableton_create_drum_variation` | Create-only drum A/B variation (groove / density / fill); use when you do not want audition yet |
-| `ableton_create_bass_variation` | Create-only bass A/B variation (octave / staccato / groove) |
 | `ableton_create_scene_energy_variation` | Create-only scene energy variation (lift / pullback); keeps B if fire fails |
 | `ableton_audition_ab` | Audition existing A/B clips or scenes on Live song time |
 | `ableton_record_variation_preference` | Save whether the source or variation matched your taste (drum, bass, scene, or mix) |
@@ -372,7 +366,6 @@ finished arrangement.
 | `ableton_fire_clip_slot` / `ableton_stop_clip` | Fire/stop a clip |
 | `ableton_duplicate_clip_to` | Duplicate clip to another slot (same track, or cross-track via `target_track_index`) |
 | `ableton_delete_clip` | Delete a clip from a slot (requires `confirm=true` when a clip is present) |
-| `ableton_set_clip_name` | Rename a clip |
 | `ableton_get_clip_properties` | Get a clip's edit state: pitch/transpose, detune, warp mode, gain, markers, loop (audio + MIDI) |
 | `ableton_set_clip_pitch` | Transpose (semitones) and/or detune (cents) an audio clip |
 | `ableton_set_clip_warp` | Set an audio clip's warping on/off and warp mode (Beats/Tones/Texture/Re-Pitch/Complex/REX/Complex Pro) |
@@ -381,7 +374,7 @@ finished arrangement.
 | `ableton_get_clip_envelope` | Sample a Session clip automation envelope (volume/pan/send/device); Live 11 cannot list breakpoints (requires browser patch) |
 | `ableton_set_clip_envelope_steps` | Write Session clip automation steps; creates envelope if needed (requires browser patch) |
 | `ableton_clear_clip_envelope` | Clear one or all Session clip envelopes (`confirm=true`; requires browser patch) |
-| `ableton_chop_draft` | Generate a MIDI draft that rearranges chop slices without reproducing the source order (`avoid_copy`); apply with `ableton_add_midi_notes` |
+| `ableton_chop_draft` | Generate a MIDI draft that rearranges chop slices without reproducing the source order (`avoid_copy`); apply with `ableton_clip_write` |
 | `ableton_fire_scene` | Fire a scene |
 | `ableton_get_scene_names` | List scene names with indices |
 | `ableton_set_scene_name` | Rename a scene (e.g. Intro, Verse, Hook) |
@@ -423,7 +416,6 @@ finished arrangement.
 | `ableton_get_session_record` / `ableton_set_session_record` | Session Record on/off |
 | `ableton_bounce_session_pass` | Record a scene pass onto a Bounce track via Resampling (tens of seconds; does not export WAV) |
 | `ableton_setup_drum_track` | Create MIDI drum track, load kit, fill clip with preset pattern (requires browser patch) |
-| `ableton_build_chord_clip` | Write a MIDI chord-progression clip from a chord string (e.g. an analysis `chord_summary`); optional tempo + fire |
 | `ableton_osc_send` | Send raw OSC message |
 
 ## Example Usage

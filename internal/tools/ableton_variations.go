@@ -8,9 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/firebase/genkit/go/ai"
-	"github.com/firebase/genkit/go/genkit"
-
 	"github.com/nozomi-koborinai/ableton-osc-mcp/internal/abletonosc"
 )
 
@@ -54,15 +51,6 @@ type variationOptions struct {
 type variationClient interface {
 	Send(address string, args ...interface{}) error
 	Query(address string, args ...interface{}) ([]interface{}, error)
-}
-
-func NewAbletonCreateDrumVariation(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
-	return genkit.DefineTool(g, "ableton_create_drum_variation",
-		"Ableton Live: create only a drum A/B variation (groove, density, or fill) in an empty slot — prefer ableton_compare_ab_variation when you also want to audition",
-		func(_ *ai.ToolContext, input CreateDrumVariationInput) (CreateDrumVariationOutput, error) {
-			return createDrumVariation(client, input)
-		},
-	)
 }
 
 func createDrumVariation(client variationClient, input CreateDrumVariationInput) (CreateDrumVariationOutput, error) {

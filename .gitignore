@@ -36,3 +36,7 @@ Thumbs.db
 __pycache__/
 *.py[cod]
 *.pyo
+
+# Working design docs
+docs/specs/
+docs/plans/

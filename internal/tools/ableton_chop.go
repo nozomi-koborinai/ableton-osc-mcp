@@ -9,6 +9,8 @@ import (
 
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/genkit"
+
+	"github.com/nozomi-koborinai/ableton-osc-mcp/internal/notation"
 )
 
 // chopGrids maps a step-grid name to its length in beats (4/4).
@@ -30,6 +32,10 @@ type ChopDraftInput struct {
 }
 
 type ChopDraftOutput struct {
+	// Notation is the draft as clip notation, ready to hand to ableton_clip_write.
+	// Notes carries the same thing as structured values for anything that would
+	// rather read fields than parse text.
+	Notation    string     `json:"notation"`
 	Notes       []MidiNote `json:"notes"`
 	Grid        string     `json:"grid"`
 	Bars        int        `json:"bars"`
@@ -42,7 +48,7 @@ type ChopDraftOutput struct {
 
 func NewAbletonChopDraft(g *genkit.Genkit) ai.Tool {
 	return genkit.DefineTool(g, "ableton_chop_draft",
-		"Generate a MIDI draft that arranges chop slices into a rhythmic pattern WITHOUT reproducing the source's original order (avoid_copy). This is a placement suggestion for slices/pads (e.g. a Simpler in Slice mode or a Drum Rack), not a transcription of any melody. Returns notes to review, then apply with ableton_add_midi_notes.",
+		"Generate a MIDI draft that arranges chop slices into a rhythmic pattern WITHOUT reproducing the source's original order (avoid_copy). This is a placement suggestion for slices/pads (e.g. a Simpler in Slice mode or a Drum Rack), not a transcription of any melody. Returns the draft as clip notation to review\\, then apply with ableton_clip_write.",
 		func(_ *ai.ToolContext, input ChopDraftInput) (ChopDraftOutput, error) {
 			return generateChopDraft(input)
 		},
@@ -138,7 +144,32 @@ func generateChopDraft(input ChopDraftInput) (ChopDraftOutput, error) {
 		})
 	}
 
+	draft := notation.Clip{
+		Name: fmt.Sprintf("Chop %s %dbar", grid, bars),
+		Bars: bars,
+		// The draft lays its own grid out in 4/4; ableton_clip_write refuses the
+		// notation if the song is in anything else, which is the right moment to
+		// find out rather than after the notes have landed.
+		SigNum: 4,
+		SigDen: 4,
+		Notes:  make([]notation.Note, 0, len(notes)),
+	}
+	for _, n := range notes {
+		draft.Notes = append(draft.Notes, notation.Note{
+			Pitch:     n.Pitch,
+			StartTime: n.StartTime,
+			Duration:  n.Duration,
+			Velocity:  n.Velocity,
+			Mute:      n.Mute != nil && *n.Mute,
+		})
+	}
+	draftText, err := notation.Format(draft)
+	if err != nil {
+		return ChopDraftOutput{}, err
+	}
+
 	return ChopDraftOutput{
+		Notation:    draftText,
 		Notes:       notes,
 		Grid:        grid,
 		Bars:        bars,
@@ -146,7 +177,7 @@ func generateChopDraft(input ChopDraftInput) (ChopDraftOutput, error) {
 		LengthBeats: lengthBeats,
 		Seed:        seed,
 		Note:        "Placement suggestion only: a rearrangement of slice triggers, not a transcription of the source. Review/edit before applying.",
-		NextStep:    fmt.Sprintf("Create a clip of %.0f beats, then apply with ableton_add_midi_notes(notes). Reuse the same seed to reproduce this draft.", lengthBeats),
+		NextStep:    fmt.Sprintf("Pass `notation` to ableton_clip_write with an empty rev to create a %.0f-beat clip from this draft. Reuse the same seed to reproduce it.", lengthBeats),
 	}, nil
 }
 

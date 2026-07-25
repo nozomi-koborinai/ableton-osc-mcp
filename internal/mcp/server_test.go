@@ -54,8 +54,8 @@ func TestServerExposesFullSchemas(t *testing.T) {
 	}
 
 	list := envelope.Result.Tools
-	if len(list) != 107 {
-		t.Fatalf("tools/list returned %d tools, want 107", len(list))
+	if len(list) != 100 {
+		t.Fatalf("tools/list returned %d tools, want 100", len(list))
 	}
 
 	// The regression this whole change exists to prevent.
@@ -86,7 +86,7 @@ func TestServerExposesFullSchemas(t *testing.T) {
 	if readOnly != 35 {
 		t.Errorf("readOnly tools = %d, want 35", readOnly)
 	}
-	if destructive != 9 {
-		t.Errorf("destructive tools = %d, want 9", destructive)
+	if destructive != 8 {
+		t.Errorf("destructive tools = %d, want 8", destructive)
 	}
 }

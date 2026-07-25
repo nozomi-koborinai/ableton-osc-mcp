@@ -7,11 +7,6 @@ import (
 	"math/rand"
 	"strings"
 	"time"
-
-	"github.com/firebase/genkit/go/ai"
-	"github.com/firebase/genkit/go/genkit"
-
-	"github.com/nozomi-koborinai/ableton-osc-mcp/internal/abletonosc"
 )
 
 const defaultBassVariationStrength = 0.6
@@ -41,15 +36,6 @@ type CreateBassVariationOutput struct {
 type bassVariationOptions struct {
 	Strength float64
 	Seed     int64
-}
-
-func NewAbletonCreateBassVariation(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
-	return genkit.DefineTool(g, "ableton_create_bass_variation",
-		"Ableton Live: create only a bass A/B variation (octave, staccato, or groove) in an empty slot — prefer ableton_compare_ab_variation when you also want to audition",
-		func(_ *ai.ToolContext, input CreateBassVariationInput) (CreateBassVariationOutput, error) {
-			return createBassVariation(client, input)
-		},
-	)
 }
 
 func createBassVariation(client variationClient, input CreateBassVariationInput) (CreateBassVariationOutput, error) {

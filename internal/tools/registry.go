@@ -55,17 +55,15 @@ func Register(g *genkit.Genkit, deps Deps) []ai.Tool {
 		NewAbletonGetDeviceSidechain(g, c),
 		NewAbletonSetDeviceSidechain(g, c),
 
+		// Clip notation — the only way to read or change note content
+		NewAbletonClipRead(g, c),
+		NewAbletonClipWrite(g, c),
+
 		// Clips
-		NewAbletonCreateClip(g, c),
-		NewAbletonGetClipNotes(g, c),
 		NewAbletonFireClipSlot(g, c),
 		NewAbletonStopClip(g, c),
-		NewAbletonClearClipNotes(g, c),
-		NewAbletonAddMidiNotes(g, c),
-		NewAbletonHumanizeClip(g, c),
 		NewAbletonDuplicateClipTo(g, c),
 		NewAbletonDeleteClip(g, c),
-		NewAbletonSetClipName(g, c),
 		NewAbletonGetClipProperties(g, c),
 		NewAbletonSetClipPitch(g, c),
 		NewAbletonSetClipWarp(g, c),
@@ -78,8 +76,6 @@ func Register(g *genkit.Genkit, deps Deps) []ai.Tool {
 		NewAbletonAnalyzeLocalAudio(g),
 		NewAbletonAnalyzeAudioURL(g),
 		NewAbletonChopDraft(g),
-		NewAbletonCreateDrumVariation(g, c),
-		NewAbletonCreateBassVariation(g, c),
 		NewAbletonAuditionAB(g, c),
 
 		// Scenes
@@ -137,7 +133,6 @@ func Register(g *genkit.Genkit, deps Deps) []ai.Tool {
 		NewAbletonSetupDrumTrack(g, c),
 		NewAbletonCompareABVariation(g, c),
 		NewAbletonCompareFXBypass(g, c),
-		NewAbletonBuildChordClip(g, c),
 
 		// A/B comparison feedback
 		NewAbletonRecordVariationPreference(g, deps.TasteStore),
