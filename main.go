@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 
-	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/genkit"
 
 	"github.com/nozomi-koborinai/ableton-osc-mcp/internal/abletonosc"
@@ -46,139 +45,17 @@ func main() {
 		log.Fatal(err)
 	}
 
-	toolList := []ai.Tool{
-		// Song / Transport
-		tools.NewAbletonTest(g, ableton),
-		tools.NewAbletonPreviewDestructive(g, ableton),
-		tools.NewAbletonDiagnose(g, ableton, tools.DiagnoseSettings{
+	toolList := tools.Register(g, tools.Deps{
+		Client:     ableton,
+		TasteStore: tasteStore,
+		Diagnose: tools.DiagnoseSettings{
 			Host:       cfg.AbletonHost,
 			Port:       cfg.AbletonPort,
 			ClientPort: cfg.AbletonClientPort,
 			Timeout:    cfg.Timeout,
-		}),
-		tools.NewAbletonGetTempo(g, ableton),
-		tools.NewAbletonSetTempo(g, ableton),
-		tools.NewAbletonPlay(g, ableton),
-		tools.NewAbletonStop(g, ableton),
-		tools.NewAbletonStopAllClips(g, ableton),
-		tools.NewAbletonSetSongKey(g, ableton),
-		tools.NewAbletonSetMetronome(g, ableton),
-		tools.NewAbletonGetSessionSnapshot(g, ableton),
-
-		// Tracks
-		tools.NewAbletonGetTrackNames(g, ableton),
-		tools.NewAbletonGetTrackDevices(g, ableton),
-		tools.NewAbletonCreateMidiTrack(g, ableton),
-		tools.NewAbletonCreateAudioTrack(g, ableton),
-		tools.NewAbletonDuplicateTrack(g, ableton),
-		tools.NewAbletonDeleteTrack(g, ableton),
-		tools.NewAbletonSetTrackName(g, ableton),
-		tools.NewAbletonMuteTrack(g, ableton),
-		tools.NewAbletonSoloTrack(g, ableton),
-		tools.NewAbletonSetTrackVolume(g, ableton),
-		tools.NewAbletonArmTrack(g, ableton),
-		tools.NewAbletonGetTrackInputRouting(g, ableton),
-		tools.NewAbletonSetTrackInputRouting(g, ableton),
-		tools.NewAbletonSetMonitoring(g, ableton),
-		tools.NewAbletonDuplicateTrackForProcessing(g, ableton),
-		tools.NewAbletonGetReturnTracks(g, ableton),
-		tools.NewAbletonCreateReturnTrack(g, ableton),
-		tools.NewAbletonGetTrackSends(g, ableton),
-		tools.NewAbletonSetTrackSend(g, ableton),
-		tools.NewAbletonGetDeviceSidechain(g, ableton),
-		tools.NewAbletonSetDeviceSidechain(g, ableton),
-
-		// Clips
-		tools.NewAbletonCreateClip(g, ableton),
-		tools.NewAbletonGetClipNotes(g, ableton),
-		tools.NewAbletonFireClipSlot(g, ableton),
-		tools.NewAbletonStopClip(g, ableton),
-		tools.NewAbletonClearClipNotes(g, ableton),
-		tools.NewAbletonAddMidiNotes(g, ableton),
-		tools.NewAbletonHumanizeClip(g, ableton),
-		tools.NewAbletonDuplicateClipTo(g, ableton),
-		tools.NewAbletonDeleteClip(g, ableton),
-		tools.NewAbletonSetClipName(g, ableton),
-		tools.NewAbletonGetClipProperties(g, ableton),
-		tools.NewAbletonSetClipPitch(g, ableton),
-		tools.NewAbletonSetClipWarp(g, ableton),
-		tools.NewAbletonSetClipRegion(g, ableton),
-		tools.NewAbletonExtractClipRegion(g, ableton),
-		tools.NewAbletonGetClipEnvelope(g, ableton),
-		tools.NewAbletonSetClipEnvelopeSteps(g, ableton),
-		tools.NewAbletonClearClipEnvelope(g, ableton),
-		tools.NewAbletonMatchClipTempo(g, ableton),
-		tools.NewAbletonAnalyzeLocalAudio(g),
-		tools.NewAbletonAnalyzeAudioURL(g),
-		tools.NewAbletonChopDraft(g),
-		tools.NewAbletonCreateDrumVariation(g, ableton),
-		tools.NewAbletonCreateBassVariation(g, ableton),
-		tools.NewAbletonAuditionAB(g, ableton),
-
-		// Scenes
-		tools.NewAbletonFireScene(g, ableton),
-		tools.NewAbletonGetSceneNames(g, ableton),
-		tools.NewAbletonSetSceneName(g, ableton),
-		tools.NewAbletonCreateNamedScenes(g, ableton),
-		tools.NewAbletonSetSceneClipPresence(g, ableton),
-		tools.NewAbletonCreateSceneEnergyVariation(g, ableton),
-		tools.NewAbletonGetSoundingSnapshot(g, ableton),
-
-		// Devices / Browser
-		tools.NewAbletonGetDeviceParameters(g, ableton),
-		tools.NewAbletonSetDeviceParameter(g, ableton),
-		tools.NewAbletonSetDeviceParameterString(g, ableton),
-		tools.NewAbletonDeleteDevice(g, ableton),
-		tools.NewAbletonGetSimpler(g, ableton),
-		tools.NewAbletonSetSimplerPlaybackMode(g, ableton),
-		tools.NewAbletonSetSimplerSlicing(g, ableton),
-		tools.NewAbletonGetSimplerSlices(g, ableton),
-		tools.NewAbletonSaveSlicePreset(g, ableton),
-		tools.NewAbletonLoadSlicePreset(g, ableton),
-		tools.NewAbletonListSlicePresets(g),
-		tools.NewAbletonApplyDeviceIntent(g, ableton),
-		tools.NewAbletonListIntents(g),
-		tools.NewAbletonFindBrowserItem(g, ableton),
-		tools.NewAbletonListBrowserFolder(g, ableton),
-		tools.NewAbletonLoadBrowserItem(g, ableton),
-		tools.NewAbletonLoadBrowserPath(g, ableton),
-		tools.NewAbletonLoadDevicePreset(g, ableton),
-		tools.NewAbletonGetSpliceLibrary(g, tools.SpliceLibrarySettings{ConfiguredPath: cfg.SplicePath}),
-		tools.NewAbletonSearchSpliceSamples(g, tools.SpliceLibrarySettings{ConfiguredPath: cfg.SplicePath}),
-		tools.NewAbletonLoadSpliceSample(g, ableton, tools.SpliceLibrarySettings{ConfiguredPath: cfg.SplicePath}),
-
-		// Mix bus / Master
-		tools.NewAbletonGetTrackMeter(g, ableton),
-		tools.NewAbletonGetMasterMeter(g, ableton),
-		tools.NewAbletonGetMasterVolume(g, ableton),
-		tools.NewAbletonSetMasterVolume(g, ableton),
-		tools.NewAbletonGetMasterDevices(g, ableton),
-		tools.NewAbletonGetMasterDeviceParameters(g, ableton),
-		tools.NewAbletonSetMasterDeviceParameter(g, ableton),
-		tools.NewAbletonLoadOnMaster(g, ableton),
-		tools.NewAbletonAutogainTracks(g, ableton),
-		tools.NewAbletonCaptureMixSnapshot(g, ableton),
-		tools.NewAbletonApplyMixVariation(g, ableton),
-		tools.NewAbletonRestoreMixSnapshot(g, ableton),
-
-		// Bounce / Session Record
-		tools.NewAbletonGetSessionRecord(g, ableton),
-		tools.NewAbletonSetSessionRecord(g, ableton),
-		tools.NewAbletonBounceSessionPass(g, ableton),
-
-		// Recipes
-		tools.NewAbletonSetupDrumTrack(g, ableton),
-		tools.NewAbletonCompareABVariation(g, ableton),
-		tools.NewAbletonCompareFXBypass(g, ableton),
-		tools.NewAbletonBuildChordClip(g, ableton),
-
-		// A/B comparison feedback
-		tools.NewAbletonRecordVariationPreference(g, tasteStore),
-		tools.NewAbletonGetTasteProfile(g, tasteStore),
-
-		// Raw OSC
-		tools.NewAbletonOscSend(g, ableton),
-	}
+		},
+		Splice: tools.SpliceLibrarySettings{ConfiguredPath: cfg.SplicePath},
+	})
 
 	// Expose Genkit tools via MCP (stdio)
 	mcpServer := mcpinternal.NewMCPServer(g, "ableton-osc-mcp", version, toolList)
