@@ -7,42 +7,62 @@ import (
 	"testing"
 )
 
-type humanizeClientStub struct {
-	notesRes    []interface{}
-	lengthRes   []interface{}
-	calls       []string
-	sendErr     map[string]error
-	failAddOnce bool
-	addCalls    [][]interface{}
+// clipLengthStub stands in for Live when exercising queryClipLength, which the
+// drum and bass variation builders both rely on to know where a clip ends.
+type clipLengthStub struct {
+	res []interface{}
+	err error
 }
 
-func (s *humanizeClientStub) Query(address string, _ ...interface{}) ([]interface{}, error) {
-	s.calls = append(s.calls, "Query:"+address)
-	switch address {
-	case "/live/clip/get/notes":
-		return s.notesRes, nil
-	case "/live/clip/get/length":
-		if s.lengthRes == nil {
-			return nil, errors.New("no length")
-		}
-		return s.lengthRes, nil
-	default:
-		return nil, errors.New("unexpected query")
+func (s *clipLengthStub) Query(_ string, _ ...interface{}) ([]interface{}, error) {
+	return s.res, s.err
+}
+
+func (s *clipLengthStub) Send(_ string, _ ...interface{}) error { return nil }
+
+func TestQueryClipLength(t *testing.T) {
+	tests := []struct {
+		name string
+		stub *clipLengthStub
+		want float64
+	}{
+		{"normal_reply", &clipLengthStub{res: []interface{}{0, 0, 16.0}}, 16},
+		{"query_failed", &clipLengthStub{err: errors.New("no reply")}, 0},
+		{"empty_reply", &clipLengthStub{res: []interface{}{}}, 0},
+		{"not_a_number", &clipLengthStub{res: []interface{}{0, 0, "x"}}, 0},
+		// A clip cannot be zero or negative beats long; callers treat 0 as unknown
+		// and skip clamping rather than clamping everything to nothing.
+		{"zero_length", &clipLengthStub{res: []interface{}{0, 0, 0.0}}, 0},
+		{"negative_length", &clipLengthStub{res: []interface{}{0, 0, -4.0}}, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := queryClipLength(tt.stub, 0, 0); got != tt.want {
+				t.Errorf("queryClipLength() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 
-func (s *humanizeClientStub) Send(address string, args ...interface{}) error {
-	s.calls = append(s.calls, "Send:"+address)
-	if address == "/live/clip/add/notes" {
-		s.addCalls = append(s.addCalls, args)
-		if s.failAddOnce && len(s.addCalls) == 1 {
-			return errors.New("add failed")
+func TestAddNotesArgs(t *testing.T) {
+	mute := true
+	args := addNotesArgs(2, 3, []MidiNote{
+		{Pitch: 60, StartTime: 0, Duration: 0.5, Velocity: 100},
+		{Pitch: 62, StartTime: 1, Duration: 0.25, Velocity: 90, Mute: &mute},
+	})
+	want := []interface{}{
+		int32(2), int32(3),
+		int32(60), float32(0), float32(0.5), int32(100), false,
+		int32(62), float32(1), float32(0.25), int32(90), true,
+	}
+	if len(args) != len(want) {
+		t.Fatalf("addNotesArgs() length = %d, want %d", len(args), len(want))
+	}
+	for i := range want {
+		if args[i] != want[i] {
+			t.Errorf("arg %d = %v (%T), want %v (%T)", i, args[i], args[i], want[i], want[i])
 		}
 	}
-	if err, ok := s.sendErr[address]; ok {
-		return err
-	}
-	return nil
 }
 
 func TestHumanizeNotesIsDeterministicWithSeed(t *testing.T) {
