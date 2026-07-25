@@ -45,7 +45,7 @@ type CapabilityInfo struct {
 }
 
 type DiagnoseOutput struct {
-	Ready           bool                 `json:"ready" jsonschema:"description=true when AbletonOSC, browser patch, and master patch all respond"`
+	Ready           bool                 `json:"ready" jsonschema:"description=true when AbletonOSC\\, browser patch\\, and master patch all respond"`
 	Connected       bool                 `json:"connected" jsonschema:"description=true when stock AbletonOSC /live/test responds"`
 	BrowserPatch    bool                 `json:"browser_patch"`
 	MasterPatch     bool                 `json:"master_patch"`

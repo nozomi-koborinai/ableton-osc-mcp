@@ -21,10 +21,10 @@ const (
 )
 
 type CreateDrumVariationInput struct {
-	TrackIndex      int      `json:"track_index" jsonschema:"minimum=0"`
-	SourceClipIndex int      `json:"source_clip_index" jsonschema:"minimum=0"`
+	TrackIndex      int      `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
+	SourceClipIndex int      `json:"source_clip_index" jsonschema:"description=Clip slot to copy the source pattern from (0-based),minimum=0"`
 	TargetClipIndex int      `json:"target_clip_index" jsonschema:"description=Must be an empty clip slot for the A/B variation,minimum=0"`
-	Variation       string   `json:"variation" jsonschema:"description=One change only: groove, density, or fill"`
+	Variation       string   `json:"variation" jsonschema:"description=One change only: groove\\, density\\, or fill"`
 	Strength        *float64 `json:"strength,omitempty" jsonschema:"description=Variation intensity 0-1 (default 0.6),minimum=0,maximum=1"`
 	HatPitch        *int     `json:"hat_pitch,omitempty" jsonschema:"description=Closed hat MIDI pitch for density variation (default 42),minimum=0,maximum=127"`
 	SnarePitch      *int     `json:"snare_pitch,omitempty" jsonschema:"description=Snare MIDI pitch for fill variation (default 38),minimum=0,maximum=127"`

@@ -51,8 +51,8 @@ func NewAbletonGetSceneNames(g *genkit.Genkit, client *abletonosc.Client) ai.Too
 }
 
 type SetSceneNameInput struct {
-	SceneIndex int    `json:"scene_index" jsonschema:"minimum=0"`
-	Name       string `json:"name" jsonschema:"description=New scene name (e.g. Intro, Verse, Hook)"`
+	SceneIndex int    `json:"scene_index" jsonschema:"description=Scene index (0-based),minimum=0"`
+	Name       string `json:"name" jsonschema:"description=New scene name (e.g. Intro\\, Verse\\, Hook)"`
 }
 
 func NewAbletonSetSceneName(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
@@ -75,7 +75,7 @@ func NewAbletonSetSceneName(g *genkit.Genkit, client *abletonosc.Client) ai.Tool
 }
 
 type CreateNamedScenesInput struct {
-	Names []string `json:"names" jsonschema:"description=Scene names to create at the end of the session (e.g. Intro, Verse, Hook, Outro)"`
+	Names []string `json:"names" jsonschema:"description=Scene names to create at the end of the session (e.g. Intro\\, Verse\\, Hook\\, Outro)"`
 }
 
 type CreateNamedScenesOutput struct {
@@ -142,7 +142,7 @@ type SetSceneClipPresenceInput struct {
 
 type SceneClipPresenceChange struct {
 	TrackIndex int    `json:"track_index"`
-	Action     string `json:"action" jsonschema:"description=deleted, restored, skipped_empty, skipped_already_present, skipped_no_source"`
+	Action     string `json:"action" jsonschema:"description=deleted\\, restored\\, skipped_empty\\, skipped_already_present\\, skipped_no_source"`
 }
 
 type SetSceneClipPresenceOutput struct {

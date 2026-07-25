@@ -14,8 +14,8 @@ import (
 const defaultSceneEnergyVelocityDelta = 12
 
 type CreateSceneEnergyVariationInput struct {
-	SourceSceneIndex int    `json:"source_scene_index" jsonschema:"minimum=0"`
-	TrackIndices     []int  `json:"track_indices" jsonschema:"description=MIDI tracks whose clips in the source scene will change, minItems=1"`
+	SourceSceneIndex int    `json:"source_scene_index" jsonschema:"description=Scene to copy the clips from (0-based),minimum=0"`
+	TrackIndices     []int  `json:"track_indices" jsonschema:"description=MIDI tracks whose clips in the source scene will change,minItems=1"`
 	Variation        string `json:"variation" jsonschema:"description=One change only: lift or pullback"`
 	VelocityDelta    *int   `json:"velocity_delta,omitempty" jsonschema:"description=Velocity change in MIDI units (default 12),minimum=1,maximum=30"`
 	Fire             bool   `json:"fire,omitempty" jsonschema:"description=Fire the duplicated B scene after creating it"`
@@ -23,7 +23,7 @@ type CreateSceneEnergyVariationInput struct {
 
 type CreateSceneEnergyVariationOutput struct {
 	SourceSceneIndex int    `json:"source_scene_index"`
-	TargetSceneIndex int    `json:"target_scene_index" jsonschema:"description=Duplicated B scene, inserted directly after the source scene"`
+	TargetSceneIndex int    `json:"target_scene_index" jsonschema:"description=Duplicated B scene\\, inserted directly after the source scene"`
 	Variation        string `json:"variation"`
 	VelocityDelta    int    `json:"velocity_delta"`
 	TracksChanged    []int  `json:"tracks_changed"`

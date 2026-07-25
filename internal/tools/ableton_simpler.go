@@ -66,8 +66,8 @@ func simplerStatusError(status string) error {
 }
 
 type GetSimplerInput struct {
-	TrackIndex  int `json:"track_index" jsonschema:"minimum=0"`
-	DeviceIndex int `json:"device_index" jsonschema:"minimum=0"`
+	TrackIndex  int `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
+	DeviceIndex int `json:"device_index" jsonschema:"description=Device index on the track (0-based; from ableton_get_track_devices),minimum=0"`
 }
 
 type SimplerState struct {
@@ -172,9 +172,9 @@ func sendSimplerSet(client *abletonosc.Client, track, device int, prop string, v
 }
 
 type SetSimplerPlaybackModeInput struct {
-	TrackIndex  int    `json:"track_index" jsonschema:"minimum=0"`
-	DeviceIndex int    `json:"device_index" jsonschema:"minimum=0"`
-	Mode        string `json:"mode" jsonschema:"description=Playback mode: classic, one_shot, or slicing"`
+	TrackIndex  int    `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
+	DeviceIndex int    `json:"device_index" jsonschema:"description=Device index on the track (0-based; from ableton_get_track_devices),minimum=0"`
+	Mode        string `json:"mode" jsonschema:"description=Playback mode: classic\\, one_shot\\, or slicing"`
 }
 
 func NewAbletonSetSimplerPlaybackMode(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
@@ -197,10 +197,10 @@ func NewAbletonSetSimplerPlaybackMode(g *genkit.Genkit, client *abletonosc.Clien
 }
 
 type SetSimplerSlicingInput struct {
-	TrackIndex   int    `json:"track_index" jsonschema:"minimum=0"`
-	DeviceIndex  int    `json:"device_index" jsonschema:"minimum=0"`
-	Style        string `json:"style,omitempty" jsonschema:"description=Slicing style: transient, beat, region, or manual"`
-	BeatDivision string `json:"beat_division,omitempty" jsonschema:"description=Beat division when style=beat: 1/16, 1/16T, 1/8, 1/8T, 1/4, 1/4T, 1/2, 1/2T, 1 Bar, 2 Bars, 4 Bars"`
+	TrackIndex   int    `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
+	DeviceIndex  int    `json:"device_index" jsonschema:"description=Device index on the track (0-based; from ableton_get_track_devices),minimum=0"`
+	Style        string `json:"style,omitempty" jsonschema:"description=Slicing style: transient\\, beat\\, region\\, or manual"`
+	BeatDivision string `json:"beat_division,omitempty" jsonschema:"description=Beat division when style=beat: 1/16\\, 1/16T\\, 1/8\\, 1/8T\\, 1/4\\, 1/4T\\, 1/2\\, 1/2T\\, 1 Bar\\, 2 Bars\\, 4 Bars"`
 }
 
 func NewAbletonSetSimplerSlicing(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
@@ -239,8 +239,8 @@ func NewAbletonSetSimplerSlicing(g *genkit.Genkit, client *abletonosc.Client) ai
 }
 
 type GetSimplerSlicesInput struct {
-	TrackIndex  int `json:"track_index" jsonschema:"minimum=0"`
-	DeviceIndex int `json:"device_index" jsonschema:"minimum=0"`
+	TrackIndex  int `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
+	DeviceIndex int `json:"device_index" jsonschema:"description=Device index on the track (0-based; from ableton_get_track_devices),minimum=0"`
 }
 
 type SimplerSlice struct {

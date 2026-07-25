@@ -27,7 +27,7 @@ type GetSpliceLibraryOutput struct {
 
 type SearchSpliceSamplesInput struct {
 	Query      string `json:"query,omitempty" jsonschema:"description=Substring match against sample name or relative path"`
-	MaxResults *int   `json:"max_results,omitempty" jsonschema:"description=Max matches to return (default 20, max 50),minimum=1,maximum=50"`
+	MaxResults *int   `json:"max_results,omitempty" jsonschema:"description=Max matches to return (default 20\\, max 50),minimum=1,maximum=50"`
 }
 
 type SearchSpliceSamplesOutput struct {

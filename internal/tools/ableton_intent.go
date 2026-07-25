@@ -23,7 +23,7 @@ const intentVersion = 1
 // IntentSetting is one human-readable parameter target within an intent.
 type IntentSetting struct {
 	Param string `json:"param" jsonschema:"description=Parameter name (e.g. Frequency) or numeric index"`
-	Value string `json:"value" jsonschema:"description=Human-readable value (e.g. 180 Hz, HP, 60 %)"`
+	Value string `json:"value" jsonschema:"description=Human-readable value (e.g. 180 Hz\\, HP\\, 60 %)"`
 }
 
 // Intent is a named recipe of parameter settings, applied on top of raw
@@ -127,8 +127,8 @@ type ApplyIntentResult struct {
 }
 
 type ApplyDeviceIntentInput struct {
-	TrackIndex  int             `json:"track_index" jsonschema:"minimum=0"`
-	DeviceIndex int             `json:"device_index" jsonschema:"minimum=0"`
+	TrackIndex  int             `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
+	DeviceIndex int             `json:"device_index" jsonschema:"description=Device index on the track (0-based; from ableton_get_track_devices),minimum=0"`
 	Name        string          `json:"name,omitempty" jsonschema:"description=Intent name. With settings: also save under this name. Without settings: load and apply this saved intent"`
 	Settings    []IntentSetting `json:"settings,omitempty" jsonschema:"description=Inline parameter settings to apply (and save when name is given)"`
 }

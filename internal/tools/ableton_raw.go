@@ -16,8 +16,8 @@ type RawOscSendInput struct {
 	Address    string   `json:"address" jsonschema:"description=OSC address to send (e.g. /live/song/get/tempo)"`
 	Args       []string `json:"args,omitempty" jsonschema:"description=Args as strings; auto-parsed to int/float/bool/string"`
 	ArgsJson   string   `json:"args_json,omitempty" jsonschema:"description=Args as JSON string array (alternative to args). Format: [\"arg1\", \"arg2\"]"`
-	AwaitReply *bool    `json:"await_reply,omitempty"`
-	TimeoutMs  *int     `json:"timeout_ms,omitempty" jsonschema:"minimum=1,maximum=10000"`
+	AwaitReply *bool    `json:"await_reply,omitempty" jsonschema:"description=Wait for a reply; use this for /get/ style addresses"`
+	TimeoutMs  *int     `json:"timeout_ms,omitempty" jsonschema:"description=How long to wait for a reply in milliseconds,minimum=1,maximum=10000"`
 }
 
 type RawOscSendOutput struct {

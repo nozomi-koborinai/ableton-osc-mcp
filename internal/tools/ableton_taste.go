@@ -13,8 +13,8 @@ import (
 )
 
 type RecordVariationPreferenceInput struct {
-	Instrument string `json:"instrument" jsonschema:"description=Comparison family: drum, bass, scene, mix, or fx"`
-	Variation  string `json:"variation" jsonschema:"description=Variation that was compared (e.g. groove, lift, volume, bypass)"`
+	Instrument string `json:"instrument" jsonschema:"description=Comparison family: drum\\, bass\\, scene\\, mix\\, or fx"`
+	Variation  string `json:"variation" jsonschema:"description=Variation that was compared (e.g. groove\\, lift\\, volume\\, bypass)"`
 	Preferred  string `json:"preferred" jsonschema:"description=Which version you preferred: source or variation"`
 	Note       string `json:"note,omitempty" jsonschema:"description=Optional short reason for the choice (max 500 characters)"`
 }

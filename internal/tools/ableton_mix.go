@@ -23,11 +23,11 @@ type MeterOutput struct {
 }
 
 type MasterVolumeOutput struct {
-	Volume float64 `json:"volume" jsonschema:"description=Master volume (0.0=silence, ~0.85=0dB)"`
+	Volume float64 `json:"volume" jsonschema:"description=Master volume (0.0=silence\\, ~0.85=0dB)"`
 }
 
 type SetMasterVolumeInput struct {
-	Volume float64 `json:"volume" jsonschema:"description=Master volume (0.0=silence, ~0.85=0dB),minimum=0,maximum=1"`
+	Volume float64 `json:"volume" jsonschema:"description=Master volume (0.0=silence\\, ~0.85=0dB),minimum=0,maximum=1"`
 }
 
 type MasterDevicesOutput struct {
@@ -35,13 +35,13 @@ type MasterDevicesOutput struct {
 }
 
 type MasterDeviceParametersInput struct {
-	DeviceIndex int `json:"device_index" jsonschema:"minimum=0"`
+	DeviceIndex int `json:"device_index" jsonschema:"description=Device index on the master track (0-based; from ableton_get_master_devices),minimum=0"`
 }
 
 type SetMasterDeviceParameterInput struct {
-	DeviceIndex    int     `json:"device_index" jsonschema:"minimum=0"`
-	ParameterIndex int     `json:"parameter_index" jsonschema:"minimum=0"`
-	Value          float64 `json:"value"`
+	DeviceIndex    int     `json:"device_index" jsonschema:"description=Device index on the master track (0-based; from ableton_get_master_devices),minimum=0"`
+	ParameterIndex int     `json:"parameter_index" jsonschema:"description=Parameter index (from get_master_device_parameters),minimum=0"`
+	Value          float64 `json:"value" jsonschema:"description=Parameter value to set"`
 }
 
 type LoadOnMasterInput struct {

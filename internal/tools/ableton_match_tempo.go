@@ -17,9 +17,9 @@ const (
 )
 
 type MatchClipTempoInput struct {
-	TrackIndex int    `json:"track_index" jsonschema:"minimum=0"`
-	ClipIndex  int    `json:"clip_index" jsonschema:"minimum=0"`
-	WarpMode   string `json:"warp_mode,omitempty" jsonschema:"description=Warp algorithm: beats (default, good for drums/loops) or complex (longer tonal samples)"`
+	TrackIndex int    `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
+	ClipIndex  int    `json:"clip_index" jsonschema:"description=Clip slot index (0-based; same row as the scene),minimum=0"`
+	WarpMode   string `json:"warp_mode,omitempty" jsonschema:"description=Warp algorithm: beats (default\\, good for drums/loops) or complex (longer tonal samples)"`
 	Fire       bool   `json:"fire,omitempty" jsonschema:"description=Fire the clip after enabling warp"`
 }
 

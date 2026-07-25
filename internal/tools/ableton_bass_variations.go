@@ -17,10 +17,10 @@ import (
 const defaultBassVariationStrength = 0.6
 
 type CreateBassVariationInput struct {
-	TrackIndex      int      `json:"track_index" jsonschema:"minimum=0"`
-	SourceClipIndex int      `json:"source_clip_index" jsonschema:"minimum=0"`
+	TrackIndex      int      `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
+	SourceClipIndex int      `json:"source_clip_index" jsonschema:"description=Clip slot to copy the source pattern from (0-based),minimum=0"`
 	TargetClipIndex int      `json:"target_clip_index" jsonschema:"description=Must be an empty clip slot for the A/B variation,minimum=0"`
-	Variation       string   `json:"variation" jsonschema:"description=One change only: octave_up, octave_down, staccato, or groove"`
+	Variation       string   `json:"variation" jsonschema:"description=One change only: octave_up\\, octave_down\\, staccato\\, or groove"`
 	Strength        *float64 `json:"strength,omitempty" jsonschema:"description=Variation intensity 0-1 (default 0.6),minimum=0,maximum=1"`
 	Seed            *int64   `json:"seed,omitempty" jsonschema:"description=Optional RNG seed for reproducible groove variations"`
 	Fire            bool     `json:"fire,omitempty" jsonschema:"description=Fire the target clip after creating it"`

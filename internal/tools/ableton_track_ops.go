@@ -15,7 +15,7 @@ import (
 type DuplicateTrackForProcessingInput struct {
 	TrackIndex int    `json:"track_index" jsonschema:"description=Source track to duplicate,minimum=0"`
 	WetName    string `json:"wet_name,omitempty" jsonschema:"description=Name for the duplicated (processed/wet) track; default '<name> wet'"`
-	DrySuffix  string `json:"dry_suffix,omitempty" jsonschema:"description=If set, rename the original (dry) track by appending this, e.g. ' dry'"`
+	DrySuffix  string `json:"dry_suffix,omitempty" jsonschema:"description=If set\\, rename the original (dry) track by appending this\\, e.g. ' dry'"`
 }
 
 type DuplicateTrackForProcessingOutput struct {
@@ -233,7 +233,7 @@ func NewAbletonDeleteTrack(g *genkit.Genkit, client *abletonosc.Client) ai.Tool 
 }
 
 type DeleteClipInput struct {
-	TrackIndex int  `json:"track_index" jsonschema:"minimum=0"`
+	TrackIndex int  `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
 	ClipIndex  int  `json:"clip_index" jsonschema:"description=Scene/clip-slot index to clear,minimum=0"`
 	Confirm    bool `json:"confirm,omitempty" jsonschema:"description=Must be true to execute; omit/false returns a preview error without deleting"`
 }

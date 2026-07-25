@@ -33,10 +33,10 @@ type EnvelopeSample struct {
 }
 
 type ClipEnvelopeTarget struct {
-	TrackIndex     int `json:"track_index" jsonschema:"minimum=0"`
-	ClipIndex      int `json:"clip_index" jsonschema:"minimum=0"`
-	DeviceIndex    int `json:"device_index" jsonschema:"description=Device index, or -1 for mixer (volume/panning/sends)"`
-	ParameterIndex int `json:"parameter_index" jsonschema:"description=For mixer (-1): 0=volume, 1=panning, 2+N=send N. For devices: parameter index from get_device_parameters"`
+	TrackIndex     int `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
+	ClipIndex      int `json:"clip_index" jsonschema:"description=Clip slot index (0-based; same row as the scene),minimum=0"`
+	DeviceIndex    int `json:"device_index" jsonschema:"description=Device index\\, or -1 for mixer (volume/panning/sends)"`
+	ParameterIndex int `json:"parameter_index" jsonschema:"description=For mixer (-1): 0=volume\\, 1=panning\\, 2+N=send N. For devices: parameter index from get_device_parameters"`
 }
 
 type GetClipEnvelopeInput struct {
@@ -158,7 +158,7 @@ func NewAbletonGetClipEnvelope(g *genkit.Genkit, client *abletonosc.Client) ai.T
 type SetClipEnvelopeStepsInput struct {
 	ClipEnvelopeTarget
 	Steps []EnvelopeStep `json:"steps" jsonschema:"description=Automation steps to insert (time/duration/value)"`
-	Clear bool           `json:"clear,omitempty" jsonschema:"description=If true, clear the existing envelope before inserting"`
+	Clear bool           `json:"clear,omitempty" jsonschema:"description=If true\\, clear the existing envelope before inserting"`
 }
 
 type SetClipEnvelopeStepsOutput struct {
@@ -246,7 +246,7 @@ func NewAbletonSetClipEnvelopeSteps(g *genkit.Genkit, client *abletonosc.Client)
 
 type ClearClipEnvelopeInput struct {
 	ClipEnvelopeTarget
-	All     bool `json:"all,omitempty" jsonschema:"description=If true, clear every envelope on the clip (ignores device/parameter)"`
+	All     bool `json:"all,omitempty" jsonschema:"description=If true\\, clear every envelope on the clip (ignores device/parameter)"`
 	Confirm bool `json:"confirm,omitempty" jsonschema:"description=Must be true to execute"`
 }
 

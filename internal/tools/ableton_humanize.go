@@ -22,8 +22,8 @@ const (
 )
 
 type HumanizeClipInput struct {
-	TrackIndex     int      `json:"track_index" jsonschema:"minimum=0"`
-	ClipIndex      int      `json:"clip_index" jsonschema:"minimum=0"`
+	TrackIndex     int      `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
+	ClipIndex      int      `json:"clip_index" jsonschema:"description=Clip slot index (0-based; same row as the scene),minimum=0"`
 	TimingAmount   *float64 `json:"timing_amount,omitempty" jsonschema:"description=Max timing offset in beats (default 0.02),minimum=0,maximum=0.08"`
 	VelocityAmount *int     `json:"velocity_amount,omitempty" jsonschema:"description=Max velocity offset (default 10),minimum=0,maximum=40"`
 	Swing          *float64 `json:"swing,omitempty" jsonschema:"description=8th-note swing amount 0-1 (default 0),minimum=0,maximum=1"`

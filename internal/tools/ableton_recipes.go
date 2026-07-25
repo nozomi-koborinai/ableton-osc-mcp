@@ -29,7 +29,7 @@ type SetupDrumTrackInput struct {
 	TrackName   string   `json:"track_name,omitempty" jsonschema:"description=Optional track name (defaults to loaded kit name)"`
 	ClipIndex   *int     `json:"clip_index,omitempty" jsonschema:"description=Clip slot index (default 0),minimum=0"`
 	LengthBeats float64  `json:"length_beats,omitempty" jsonschema:"description=Clip length in beats (default 16 = 4 bars),minimum=1,maximum=128"`
-	Pattern     string   `json:"pattern,omitempty" jsonschema:"description=Preset pattern: basic_backbeat, four_on_floor, or kick_only (default basic_backbeat)"`
+	Pattern     string   `json:"pattern,omitempty" jsonschema:"description=Preset pattern: basic_backbeat\\, four_on_floor\\, or kick_only (default basic_backbeat)"`
 	Fire        bool     `json:"fire,omitempty" jsonschema:"description=Fire the clip after setup"`
 }
 

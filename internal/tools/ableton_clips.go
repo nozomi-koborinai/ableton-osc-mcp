@@ -12,26 +12,26 @@ import (
 )
 
 type StopClipInput struct {
-	TrackIndex int `json:"track_index" jsonschema:"minimum=0"`
-	ClipIndex  int `json:"clip_index" jsonschema:"minimum=0"`
+	TrackIndex int `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
+	ClipIndex  int `json:"clip_index" jsonschema:"description=Clip slot index (0-based; same row as the scene),minimum=0"`
 }
 
 type DuplicateClipToInput struct {
-	TrackIndex       int  `json:"track_index" jsonschema:"minimum=0"`
-	ClipIndex        int  `json:"clip_index" jsonschema:"minimum=0"`
+	TrackIndex       int  `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
+	ClipIndex        int  `json:"clip_index" jsonschema:"description=Clip slot index (0-based; same row as the scene),minimum=0"`
 	TargetClipIndex  int  `json:"target_clip_index" jsonschema:"description=Target clip slot (scene) index to duplicate to,minimum=0"`
 	TargetTrackIndex *int `json:"target_track_index,omitempty" jsonschema:"description=Target track index; omit to duplicate within the same track,minimum=0"`
 }
 
 type SetClipNameInput struct {
-	TrackIndex int    `json:"track_index" jsonschema:"minimum=0"`
-	ClipIndex  int    `json:"clip_index" jsonschema:"minimum=0"`
+	TrackIndex int    `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
+	ClipIndex  int    `json:"clip_index" jsonschema:"description=Clip slot index (0-based; same row as the scene),minimum=0"`
 	Name       string `json:"name" jsonschema:"description=New clip name"`
 }
 
 type CreateClipInput struct {
-	TrackIndex  int     `json:"track_index" jsonschema:"minimum=0"`
-	ClipIndex   int     `json:"clip_index" jsonschema:"minimum=0"`
+	TrackIndex  int     `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
+	ClipIndex   int     `json:"clip_index" jsonschema:"description=Clip slot index (0-based; same row as the scene),minimum=0"`
 	LengthBeats float64 `json:"length_beats" jsonschema:"description=Clip length in beats (4 beats = 1 bar in 4/4),minimum=0.25"`
 }
 
@@ -40,8 +40,8 @@ type HasClipOutput struct {
 }
 
 type FireClipSlotInput struct {
-	TrackIndex int `json:"track_index" jsonschema:"minimum=0"`
-	ClipIndex  int `json:"clip_index" jsonschema:"minimum=0"`
+	TrackIndex int `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
+	ClipIndex  int `json:"clip_index" jsonschema:"description=Clip slot index (0-based; same row as the scene),minimum=0"`
 }
 
 type FiredOutput struct {
@@ -49,8 +49,8 @@ type FiredOutput struct {
 }
 
 type ClearClipNotesInput struct {
-	TrackIndex int  `json:"track_index" jsonschema:"minimum=0"`
-	ClipIndex  int  `json:"clip_index" jsonschema:"minimum=0"`
+	TrackIndex int  `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
+	ClipIndex  int  `json:"clip_index" jsonschema:"description=Clip slot index (0-based; same row as the scene),minimum=0"`
 	Confirm    bool `json:"confirm,omitempty" jsonschema:"description=Must be true to execute; omit/false returns a preview error without clearing"`
 }
 
@@ -59,10 +59,10 @@ type ClearedOutput struct {
 }
 
 type AddMidiNotesInput struct {
-	TrackIndex int        `json:"track_index" jsonschema:"minimum=0"`
-	ClipIndex  int        `json:"clip_index" jsonschema:"minimum=0"`
+	TrackIndex int        `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
+	ClipIndex  int        `json:"clip_index" jsonschema:"description=Clip slot index (0-based; same row as the scene),minimum=0"`
 	Notes      []MidiNote `json:"notes,omitempty" jsonschema:"description=Notes to add as array"`
-	NotesJson  string     `json:"notes_json,omitempty" jsonschema:"description=Notes as JSON string (alternative to notes array). Format: [{pitch:60,start_time:0,duration:0.5,velocity:100}]"`
+	NotesJson  string     `json:"notes_json,omitempty" jsonschema:"description=Notes as JSON string (alternative to notes array). Format: [{pitch:60\\,start_time:0\\,duration:0.5\\,velocity:100}]"`
 }
 
 type AddedOutput struct {
@@ -70,11 +70,11 @@ type AddedOutput struct {
 }
 
 type ClipNotesInput struct {
-	TrackIndex int `json:"track_index" jsonschema:"minimum=0"`
-	ClipIndex  int `json:"clip_index" jsonschema:"minimum=0"`
+	TrackIndex int `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
+	ClipIndex  int `json:"clip_index" jsonschema:"description=Clip slot index (0-based; same row as the scene),minimum=0"`
 
-	StartPitch *int     `json:"start_pitch,omitempty" jsonschema:"minimum=0,maximum=127"`
-	PitchSpan  *int     `json:"pitch_span,omitempty" jsonschema:"minimum=1,maximum=128"`
+	StartPitch *int     `json:"start_pitch,omitempty" jsonschema:"description=Lowest MIDI note to return (0-127),minimum=0,maximum=127"`
+	PitchSpan  *int     `json:"pitch_span,omitempty" jsonschema:"description=How many semitones to cover starting at start_pitch,minimum=1,maximum=128"`
 	StartTime  *float64 `json:"start_time,omitempty" jsonschema:"description=Start time in beats (float)"`
 	TimeSpan   *float64 `json:"time_span,omitempty" jsonschema:"description=Time span in beats (float)"`
 }

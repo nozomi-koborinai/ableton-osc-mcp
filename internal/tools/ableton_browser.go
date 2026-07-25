@@ -21,7 +21,7 @@ type FindBrowserItemOutput struct {
 }
 
 type LoadBrowserItemInput struct {
-	TrackIndex int    `json:"track_index" jsonschema:"minimum=0"`
+	TrackIndex int    `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
 	ItemName   string `json:"item_name" jsonschema:"description=Browser item name to load (e.g. Street Kit)"`
 }
 
@@ -34,15 +34,15 @@ type LoadBrowserItemOutput struct {
 }
 
 type LoadDevicePresetInput struct {
-	TrackIndex  int    `json:"track_index" jsonschema:"minimum=0"`
-	DeviceIndex int    `json:"device_index" jsonschema:"minimum=0"`
+	TrackIndex  int    `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
+	DeviceIndex int    `json:"device_index" jsonschema:"description=Device index on the track (0-based; from ableton_get_track_devices),minimum=0"`
 	PresetName  string `json:"preset_name" jsonschema:"description=Preset name to hotswap onto the device"`
 }
 
 type LoadDevicePresetOutput struct {
 	TrackIndex  int    `json:"track_index"`
 	DeviceIndex int    `json:"device_index"`
-	Status      string `json:"status" jsonschema:"description=loaded, not_found, or invalid_device_index"`
+	Status      string `json:"status" jsonschema:"description=loaded\\, not_found\\, or invalid_device_index"`
 	PresetName  string `json:"preset_name"`
 }
 
@@ -64,7 +64,7 @@ type ListBrowserFolderOutput struct {
 }
 
 type LoadBrowserPathInput struct {
-	TrackIndex int      `json:"track_index" jsonschema:"minimum=0"`
+	TrackIndex int      `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
 	RootName   string   `json:"root_name" jsonschema:"description=Browser root (e.g. Drums)"`
 	PathParts  []string `json:"path_parts,omitempty" jsonschema:"description=Optional folder path under root"`
 	ItemName   string   `json:"item_name" jsonschema:"description=Loadable item name under the folder"`

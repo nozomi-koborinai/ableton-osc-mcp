@@ -48,8 +48,8 @@ func slotHasClip(client *abletonosc.Client, track, clip int) (bool, error) {
 }
 
 type ClipPropertiesInput struct {
-	TrackIndex int `json:"track_index" jsonschema:"minimum=0"`
-	ClipIndex  int `json:"clip_index" jsonschema:"minimum=0"`
+	TrackIndex int `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
+	ClipIndex  int `json:"clip_index" jsonschema:"description=Clip slot index (0-based; same row as the scene),minimum=0"`
 }
 
 type ClipProperties struct {
@@ -152,8 +152,8 @@ func NewAbletonGetClipProperties(g *genkit.Genkit, client *abletonosc.Client) ai
 }
 
 type SetClipPitchInput struct {
-	TrackIndex int  `json:"track_index" jsonschema:"minimum=0"`
-	ClipIndex  int  `json:"clip_index" jsonschema:"minimum=0"`
+	TrackIndex int  `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
+	ClipIndex  int  `json:"clip_index" jsonschema:"description=Clip slot index (0-based; same row as the scene),minimum=0"`
 	Coarse     *int `json:"coarse,omitempty" jsonschema:"description=Transpose in semitones (-48..48)"`
 	Fine       *int `json:"fine,omitempty" jsonschema:"description=Detune in cents (-50..50)"`
 }
@@ -207,10 +207,10 @@ func NewAbletonSetClipPitch(g *genkit.Genkit, client *abletonosc.Client) ai.Tool
 }
 
 type SetClipWarpInput struct {
-	TrackIndex int    `json:"track_index" jsonschema:"minimum=0"`
-	ClipIndex  int    `json:"clip_index" jsonschema:"minimum=0"`
+	TrackIndex int    `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
+	ClipIndex  int    `json:"clip_index" jsonschema:"description=Clip slot index (0-based; same row as the scene),minimum=0"`
 	Warping    *bool  `json:"warping,omitempty" jsonschema:"description=Enable/disable warping"`
-	WarpMode   string `json:"warp_mode,omitempty" jsonschema:"description=Beats, Tones, Texture, Re-Pitch, Complex, REX, or Complex Pro"`
+	WarpMode   string `json:"warp_mode,omitempty" jsonschema:"description=Beats\\, Tones\\, Texture\\, Re-Pitch\\, Complex\\, REX\\, or Complex Pro"`
 }
 
 type ClipWarpOutput struct {
@@ -266,8 +266,8 @@ func NewAbletonSetClipWarp(g *genkit.Genkit, client *abletonosc.Client) ai.Tool 
 }
 
 type SetClipRegionInput struct {
-	TrackIndex  int      `json:"track_index" jsonschema:"minimum=0"`
-	ClipIndex   int      `json:"clip_index" jsonschema:"minimum=0"`
+	TrackIndex  int      `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
+	ClipIndex   int      `json:"clip_index" jsonschema:"description=Clip slot index (0-based; same row as the scene),minimum=0"`
 	StartMarker *float64 `json:"start_marker,omitempty" jsonschema:"description=Start marker in beats"`
 	EndMarker   *float64 `json:"end_marker,omitempty" jsonschema:"description=End marker in beats"`
 	LoopStart   *float64 `json:"loop_start,omitempty" jsonschema:"description=Loop start in beats"`
@@ -331,7 +331,7 @@ func NewAbletonSetClipRegion(g *genkit.Genkit, client *abletonosc.Client) ai.Too
 }
 
 type ExtractClipRegionInput struct {
-	TrackIndex      int     `json:"track_index" jsonschema:"minimum=0"`
+	TrackIndex      int     `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
 	SourceClipIndex int     `json:"source_clip_index" jsonschema:"description=Slot holding the source audio clip,minimum=0"`
 	TargetClipIndex int     `json:"target_clip_index" jsonschema:"description=Empty slot to place the extracted region,minimum=0"`
 	StartBeats      float64 `json:"start_beats" jsonschema:"description=Region start within the source clip (beats)"`

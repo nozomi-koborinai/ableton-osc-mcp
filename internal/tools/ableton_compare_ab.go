@@ -13,7 +13,7 @@ import (
 )
 
 type CompareABVariationInput struct {
-	Kind             string   `json:"kind" jsonschema:"description=What to compare: drum, bass, or scene"`
+	Kind             string   `json:"kind" jsonschema:"description=What to compare: drum\\, bass\\, or scene"`
 	Variation        string   `json:"variation" jsonschema:"description=One-axis variation for the chosen kind"`
 	TrackIndex       *int     `json:"track_index,omitempty" jsonschema:"description=Required for drum/bass; omit for scene,minimum=0"`
 	SourceClipIndex  *int     `json:"source_clip_index,omitempty" jsonschema:"description=Required for drum/bass A clip,minimum=0"`
