@@ -191,6 +191,12 @@ func liveTestTarget(t *testing.T) (*abletonosc.Client, int, int) {
 
 	client, err := abletonosc.NewClient("127.0.0.1", 11000, 11001, 2*time.Second)
 	if err != nil {
+		if strings.Contains(err.Error(), "address already in use") {
+			t.Fatalf("cannot bind the reply port 11001: %v\n"+
+				"AbletonOSC always answers on that port, so only one process can hold it. "+
+				"An ableton-osc-mcp server is almost certainly running — stop it (or the "+
+				"editor hosting it) and run this again.", err)
+		}
 		t.Fatalf("connect to AbletonOSC: %v", err)
 	}
 	t.Cleanup(func() { _ = client.Close() })
