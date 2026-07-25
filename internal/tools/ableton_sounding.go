@@ -191,7 +191,7 @@ func getSoundingSnapshot(client soundingQuerier) (SoundingSnapshotOutput, error)
 
 func NewAbletonGetSoundingSnapshot(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
 	return genkit.DefineTool(g, "ableton_get_sounding_snapshot",
-		"Ableton Live: conversation-resume anchor — tempo, playback, scene names, and per-track mute/solo/playing slot, device chain, and which scenes currently have clips. Prefer this over ableton_get_session_snapshot when you need to know what is actually set up to sound.",
+		"Ableton Live: full picture of what is currently set up to sound — tempo, playback, scene names, and per-track mute/solo/playing slot, device chain, and which scenes currently have clips. Use when resuming a session or when the request depends on the current arrangement; skip it for a single targeted change. Covers more than ableton_get_session_snapshot.",
 		func(_ *ai.ToolContext, _ struct{}) (SoundingSnapshotOutput, error) {
 			return getSoundingSnapshot(client)
 		},

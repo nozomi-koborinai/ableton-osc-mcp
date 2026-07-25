@@ -59,7 +59,7 @@ type fxABClient interface {
 
 func NewAbletonCompareFXBypass(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
 	return genkit.DefineTool(g, "ableton_compare_fx_bypass",
-		"Ableton Live: A/B the same Session clip dry vs processed — bypass selected FX (A/source), then restore their prior active state (B/variation), on song time. Does not record taste; follow with ableton_record_variation_preference instrument=fx variation=bypass.",
+		"Ableton Live: A/B the same Session clip dry vs processed — bypass selected FX (A/source), then restore their prior active state (B/variation), on song time. Stop here and wait: the choice is the listener's to make, and nothing is recorded until they state one.",
 		func(_ *ai.ToolContext, input CompareFXBypassInput) (CompareFXBypassOutput, error) {
 			return compareFXBypass(client, input, time.Sleep)
 		},
