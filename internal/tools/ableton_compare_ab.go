@@ -50,7 +50,7 @@ type compareABClient interface {
 
 func NewAbletonCompareABVariation(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
 	return genkit.DefineTool(g, "ableton_compare_ab_variation",
-		"Ableton Live: preferred entry for drum/bass/scene A/B — create one variation into an empty target, audition A then B, and return a preference prompt (does not record the choice; use ableton_record_variation_preference after the listener chooses)",
+		"Ableton Live: preferred entry for drum/bass/scene A/B — create one variation into an empty target, audition A then B, and return a preference prompt. Stop here and wait: the choice is the listener's to make, and nothing is recorded until they state one.",
 		func(_ *ai.ToolContext, input CompareABVariationInput) (CompareABVariationOutput, error) {
 			return compareABVariation(client, input, time.Sleep)
 		},

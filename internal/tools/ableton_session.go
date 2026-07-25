@@ -26,7 +26,8 @@ type sessionQuerier interface {
 }
 
 func NewAbletonGetSessionSnapshot(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
-	return genkit.DefineTool(g, "ableton_get_session_snapshot", "Ableton Live: get tempo, playback state, scenes, and indexed track names",
+	return genkit.DefineTool(g, "ableton_get_session_snapshot",
+		"Ableton Live: get tempo, playback state, scenes, and indexed track names. Use when you need track or scene indices you do not already have; a request that names its own target does not need this first.",
 		func(_ *ai.ToolContext, _ EmptyInput) (SessionSnapshotOutput, error) {
 			return getSessionSnapshot(client)
 		},
