@@ -1,7 +1,6 @@
 package tools
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -23,18 +22,6 @@ type DuplicateClipToInput struct {
 	TargetTrackIndex *int `json:"target_track_index,omitempty" jsonschema:"description=Target track index; omit to duplicate within the same track,minimum=0"`
 }
 
-type SetClipNameInput struct {
-	TrackIndex int    `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
-	ClipIndex  int    `json:"clip_index" jsonschema:"description=Clip slot index (0-based; same row as the scene),minimum=0"`
-	Name       string `json:"name" jsonschema:"description=New clip name"`
-}
-
-type CreateClipInput struct {
-	TrackIndex  int     `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
-	ClipIndex   int     `json:"clip_index" jsonschema:"description=Clip slot index (0-based; same row as the scene),minimum=0"`
-	LengthBeats float64 `json:"length_beats" jsonschema:"description=Clip length in beats (4 beats = 1 bar in 4/4),minimum=0.25"`
-}
-
 type HasClipOutput struct {
 	HasClip bool `json:"has_clip"`
 }
@@ -46,124 +33,6 @@ type FireClipSlotInput struct {
 
 type FiredOutput struct {
 	Fired bool `json:"fired"`
-}
-
-type ClearClipNotesInput struct {
-	TrackIndex int  `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
-	ClipIndex  int  `json:"clip_index" jsonschema:"description=Clip slot index (0-based; same row as the scene),minimum=0"`
-	Confirm    bool `json:"confirm,omitempty" jsonschema:"description=Must be true to execute; omit/false returns a preview error without clearing"`
-}
-
-type ClearedOutput struct {
-	Cleared bool `json:"cleared"`
-}
-
-type AddMidiNotesInput struct {
-	TrackIndex int        `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
-	ClipIndex  int        `json:"clip_index" jsonschema:"description=Clip slot index (0-based; same row as the scene),minimum=0"`
-	Notes      []MidiNote `json:"notes,omitempty" jsonschema:"description=Notes to add as array"`
-	NotesJson  string     `json:"notes_json,omitempty" jsonschema:"description=Notes as JSON string (alternative to notes array). Format: [{pitch:60\\,start_time:0\\,duration:0.5\\,velocity:100}]"`
-}
-
-type AddedOutput struct {
-	Added int `json:"added"`
-}
-
-type ClipNotesInput struct {
-	TrackIndex int `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
-	ClipIndex  int `json:"clip_index" jsonschema:"description=Clip slot index (0-based; same row as the scene),minimum=0"`
-
-	StartPitch *int     `json:"start_pitch,omitempty" jsonschema:"description=Lowest MIDI note to return (0-127),minimum=0,maximum=127"`
-	PitchSpan  *int     `json:"pitch_span,omitempty" jsonschema:"description=How many semitones to cover starting at start_pitch,minimum=1,maximum=128"`
-	StartTime  *float64 `json:"start_time,omitempty" jsonschema:"description=Start time in beats (float)"`
-	TimeSpan   *float64 `json:"time_span,omitempty" jsonschema:"description=Time span in beats (float)"`
-}
-
-type ClipNotesOutput struct {
-	TrackIndex int        `json:"track_index"`
-	ClipIndex  int        `json:"clip_index"`
-	Notes      []MidiNote `json:"notes"`
-}
-
-func NewAbletonCreateClip(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
-	return genkit.DefineTool(g, "ableton_create_clip", "Ableton Live: create clip",
-		func(_ *ai.ToolContext, input CreateClipInput) (HasClipOutput, error) {
-			if err := validateTrackClipIndices(input.TrackIndex, input.ClipIndex); err != nil {
-				return HasClipOutput{}, err
-			}
-			if input.LengthBeats <= 0 {
-				return HasClipOutput{}, errors.New("length_beats must be > 0")
-			}
-			if err := client.Send("/live/clip_slot/create_clip",
-				int32(input.TrackIndex),
-				int32(input.ClipIndex),
-				float32(input.LengthBeats),
-			); err != nil {
-				return HasClipOutput{}, err
-			}
-			res, err := client.Query("/live/clip_slot/get/has_clip", int32(input.TrackIndex), int32(input.ClipIndex))
-			if err != nil {
-				return HasClipOutput{}, err
-			}
-			if err := ensureResponseLen(res, 3); err != nil {
-				return HasClipOutput{}, err
-			}
-			has, err := abletonosc.AsBool(res[2])
-			if err != nil {
-				return HasClipOutput{}, err
-			}
-			return HasClipOutput{HasClip: has}, nil
-		},
-	)
-}
-
-func NewAbletonGetClipNotes(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
-	return genkit.DefineTool(g, "ableton_get_clip_notes", "Ableton Live: get MIDI notes in a clip",
-		func(_ *ai.ToolContext, input ClipNotesInput) (ClipNotesOutput, error) {
-			if err := validateTrackClipIndices(input.TrackIndex, input.ClipIndex); err != nil {
-				return ClipNotesOutput{}, err
-			}
-			rangeProvided := input.StartPitch != nil || input.PitchSpan != nil || input.StartTime != nil || input.TimeSpan != nil
-			if rangeProvided {
-				if input.StartPitch == nil || input.PitchSpan == nil || input.StartTime == nil || input.TimeSpan == nil {
-					return ClipNotesOutput{}, errors.New("start_pitch, pitch_span, start_time, time_span must be set together")
-				}
-				if *input.StartPitch < 0 || *input.StartPitch > 127 {
-					return ClipNotesOutput{}, errors.New("start_pitch must be 0..127")
-				}
-				if *input.PitchSpan <= 0 || *input.PitchSpan > 128 {
-					return ClipNotesOutput{}, errors.New("pitch_span must be 1..128")
-				}
-				if *input.TimeSpan <= 0 {
-					return ClipNotesOutput{}, errors.New("time_span must be > 0")
-				}
-			}
-
-			args := []interface{}{int32(input.TrackIndex), int32(input.ClipIndex)}
-			if rangeProvided {
-				args = append(args,
-					int32(*input.StartPitch),
-					int32(*input.PitchSpan),
-					float32(*input.StartTime),
-					float32(*input.TimeSpan),
-				)
-			}
-
-			res, err := client.Query("/live/clip/get/notes", args...)
-			if err != nil {
-				return ClipNotesOutput{}, err
-			}
-			trackIndex, clipIndex, notes, err := parseClipNotesResponse(res)
-			if err != nil {
-				return ClipNotesOutput{}, err
-			}
-			return ClipNotesOutput{
-				TrackIndex: trackIndex,
-				ClipIndex:  clipIndex,
-				Notes:      notes,
-			}, nil
-		},
-	)
 }
 
 func parseClipNotesResponse(res []interface{}) (int, int, []MidiNote, error) {
@@ -232,78 +101,6 @@ func NewAbletonFireClipSlot(g *genkit.Genkit, client *abletonosc.Client) ai.Tool
 	)
 }
 
-func NewAbletonClearClipNotes(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
-	return genkit.DefineTool(g, "ableton_clear_clip_notes",
-		"Ableton Live: clear all notes in a clip. Requires confirm=true. Prefer ableton_preview_destructive with action=clear_clip_notes first.",
-		func(_ *ai.ToolContext, input ClearClipNotesInput) (ClearedOutput, error) {
-			if err := validateTrackClipIndices(input.TrackIndex, input.ClipIndex); err != nil {
-				return ClearedOutput{}, err
-			}
-			if err := requireConfirm(input.Confirm, "clear_clip_notes",
-				fmt.Sprintf("all notes in clip [%d,%d]", input.TrackIndex, input.ClipIndex)); err != nil {
-				return ClearedOutput{}, err
-			}
-			// AbletonOSC: Passing only (track_index, clip_index) clears all notes.
-			if err := client.Send("/live/clip/remove/notes", int32(input.TrackIndex), int32(input.ClipIndex)); err != nil {
-				return ClearedOutput{}, err
-			}
-			return ClearedOutput{Cleared: true}, nil
-		},
-	)
-}
-
-func NewAbletonAddMidiNotes(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
-	return genkit.DefineTool(g, "ableton_add_midi_notes", "Ableton Live: add MIDI notes to a clip",
-		func(_ *ai.ToolContext, input AddMidiNotesInput) (AddedOutput, error) {
-			if err := validateTrackClipIndices(input.TrackIndex, input.ClipIndex); err != nil {
-				return AddedOutput{}, err
-			}
-
-			// Parse notes from JSON string if notes array is empty but notes_json is provided
-			notes := input.Notes
-			if len(notes) == 0 && input.NotesJson != "" {
-				if err := json.Unmarshal([]byte(input.NotesJson), &notes); err != nil {
-					return AddedOutput{}, fmt.Errorf("failed to parse notes_json: %w", err)
-				}
-			}
-
-			if len(notes) == 0 {
-				return AddedOutput{}, errors.New("notes must not be empty (provide either 'notes' array or 'notes_json' string)")
-			}
-			args := []interface{}{int32(input.TrackIndex), int32(input.ClipIndex)}
-			for _, n := range notes {
-				if n.Pitch < 0 || n.Pitch > 127 {
-					return AddedOutput{}, errors.New("pitch must be 0..127")
-				}
-				if n.Duration <= 0 {
-					return AddedOutput{}, errors.New("duration must be > 0")
-				}
-				if n.StartTime < 0 {
-					return AddedOutput{}, errors.New("start_time must be >= 0")
-				}
-				if n.Velocity < 1 || n.Velocity > 127 {
-					return AddedOutput{}, errors.New("velocity must be 1..127")
-				}
-				mute := false
-				if n.Mute != nil {
-					mute = *n.Mute
-				}
-				args = append(args,
-					int32(n.Pitch),
-					float32(n.StartTime),
-					float32(n.Duration),
-					int32(n.Velocity),
-					mute,
-				)
-			}
-			if err := client.Send("/live/clip/add/notes", args...); err != nil {
-				return AddedOutput{}, err
-			}
-			return AddedOutput{Added: len(notes)}, nil
-		},
-	)
-}
-
 func NewAbletonStopClip(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
 	return genkit.DefineTool(g, "ableton_stop_clip", "Ableton Live: stop a clip",
 		func(_ *ai.ToolContext, input StopClipInput) (SentOutput, error) {
@@ -341,20 +138,6 @@ func NewAbletonDuplicateClipTo(g *genkit.Genkit, client *abletonosc.Client) ai.T
 				int32(targetTrack),
 				int32(input.TargetClipIndex),
 			); err != nil {
-				return SentOutput{}, err
-			}
-			return SentOutput{Sent: true}, nil
-		},
-	)
-}
-
-func NewAbletonSetClipName(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
-	return genkit.DefineTool(g, "ableton_set_clip_name", "Ableton Live: set clip name",
-		func(_ *ai.ToolContext, input SetClipNameInput) (SentOutput, error) {
-			if err := validateTrackClipIndices(input.TrackIndex, input.ClipIndex); err != nil {
-				return SentOutput{}, err
-			}
-			if err := client.Send("/live/clip/set/name", int32(input.TrackIndex), int32(input.ClipIndex), input.Name); err != nil {
 				return SentOutput{}, err
 			}
 			return SentOutput{Sent: true}, nil

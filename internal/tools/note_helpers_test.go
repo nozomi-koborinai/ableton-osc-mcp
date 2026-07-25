@@ -4,7 +4,6 @@ import (
 	"errors"
 	"math"
 	"math/rand"
-	"strings"
 	"testing"
 )
 
@@ -115,55 +114,6 @@ func TestApplyEighthSwing(t *testing.T) {
 	}
 }
 
-func TestHumanizeClip(t *testing.T) {
-	t.Parallel()
-
-	seed := int64(99)
-	strength := 0.5
-	client := &humanizeClientStub{
-		notesRes: []interface{}{
-			int32(1), int32(0),
-			int32(36), float32(0), float32(0.25), int32(100), false,
-			int32(38), float32(1), float32(0.25), int32(100), false,
-		},
-		lengthRes: []interface{}{int32(1), int32(0), float32(4)},
-	}
-
-	got, err := humanizeClip(client, HumanizeClipInput{
-		TrackIndex: 1,
-		ClipIndex:  0,
-		Strength:   &strength,
-		Seed:       &seed,
-	})
-	if err != nil {
-		t.Fatalf("humanizeClip() error = %v", err)
-	}
-	if got.NotesUpdated != 2 {
-		t.Errorf("NotesUpdated = %d, want 2", got.NotesUpdated)
-	}
-	if got.Seed != seed {
-		t.Errorf("Seed = %d, want %d", got.Seed, seed)
-	}
-	if got.Strength != strength {
-		t.Errorf("Strength = %v, want %v", got.Strength, strength)
-	}
-
-	wantCalls := []string{
-		"Query:/live/clip/get/notes",
-		"Query:/live/clip/get/length",
-		"Send:/live/clip/remove/notes",
-		"Send:/live/clip/add/notes",
-	}
-	if len(client.calls) != len(wantCalls) {
-		t.Fatalf("calls = %v, want %v", client.calls, wantCalls)
-	}
-	for i := range wantCalls {
-		if client.calls[i] != wantCalls[i] {
-			t.Errorf("calls[%d] = %q, want %q", i, client.calls[i], wantCalls[i])
-		}
-	}
-}
-
 func TestHumanizeNotesClampsToClipLength(t *testing.T) {
 	t.Parallel()
 
@@ -182,64 +132,5 @@ func TestHumanizeNotesClampsToClipLength(t *testing.T) {
 	}
 	if got[0].StartTime < 0 {
 		t.Errorf("start = %v, want >= 0", got[0].StartTime)
-	}
-}
-
-func TestHumanizeClipRestoresOnAddFailure(t *testing.T) {
-	t.Parallel()
-
-	seed := int64(5)
-	client := &humanizeClientStub{
-		notesRes: []interface{}{
-			int32(0), int32(0),
-			int32(36), float32(0), float32(0.25), int32(100), false,
-		},
-		failAddOnce: true,
-	}
-	_, err := humanizeClip(client, HumanizeClipInput{TrackIndex: 0, ClipIndex: 0, Seed: &seed})
-	if err == nil {
-		t.Fatal("humanizeClip() error = nil, want add-failure error")
-	}
-	if !strings.Contains(err.Error(), "restored") {
-		t.Errorf("error = %q, want restore note", err)
-	}
-	if len(client.addCalls) != 2 {
-		t.Fatalf("add/notes called %d times, want 2 (humanized + restore)", len(client.addCalls))
-	}
-	// The restore call must carry the original note payload (start time 0, velocity 100).
-	restore := client.addCalls[1]
-	if len(restore) != 7 {
-		t.Fatalf("restore args len = %d, want 7", len(restore))
-	}
-	if restore[3] != float32(0) || restore[5] != int32(100) {
-		t.Errorf("restore payload = %v, want original note", restore)
-	}
-}
-
-func TestHumanizeClipRejectsEmptyClip(t *testing.T) {
-	t.Parallel()
-
-	client := &humanizeClientStub{
-		notesRes: []interface{}{int32(0), int32(0)},
-	}
-	_, err := humanizeClip(client, HumanizeClipInput{TrackIndex: 0, ClipIndex: 0})
-	if err == nil {
-		t.Fatal("humanizeClip() error = nil, want empty-clip error")
-	}
-}
-
-func TestResolveHumanizeOptionsValidation(t *testing.T) {
-	t.Parallel()
-
-	badTiming := 1.0
-	_, err := resolveHumanizeOptions(HumanizeClipInput{TimingAmount: &badTiming})
-	if err == nil {
-		t.Fatal("expected timing_amount validation error")
-	}
-
-	badSwing := 1.5
-	_, err = resolveHumanizeOptions(HumanizeClipInput{Swing: &badSwing})
-	if err == nil {
-		t.Fatal("expected swing validation error")
 	}
 }

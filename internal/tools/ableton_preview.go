@@ -125,7 +125,7 @@ func previewDestructive(client oscQuerier, input PreviewDestructiveInput) (Previ
 		}
 		out.Summary = fmt.Sprintf("clear all notes in clip [%d,%d] (~%d notes)", t, c, n)
 		out.Details = append(out.Details, fmt.Sprintf("estimated_notes: %d", n))
-		out.Hint = "Call ableton_clear_clip_notes with the same indices and confirm=true."
+		out.Hint = "Read the clip with ableton_clip_read, then call ableton_clip_write with the same rev and a notation body that has no note lines."
 
 	case "clear_scene_clips":
 		if input.SceneIndex == nil {

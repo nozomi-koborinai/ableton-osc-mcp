@@ -118,6 +118,25 @@ func writeClipNotation(client clipNotationClient, input ClipWriteInput) (ClipWri
 			"Fix the notation and send it again. Nothing was changed in Live.")
 	}
 
+	// Stage two: the header's signature has to be the song's. Positions are counted
+	// in bars and beats, so notation written against another signature puts every
+	// note somewhere else — and the note comparison at the end would still pass,
+	// because it compares notes rather than the text that described them.
+	sigNum, err := querySignaturePart(client, "/live/song/get/signature_numerator")
+	if err != nil {
+		return ClipWriteOutput{}, err
+	}
+	sigDen, err := querySignaturePart(client, "/live/song/get/signature_denominator")
+	if err != nil {
+		return ClipWriteOutput{}, err
+	}
+	if wanted.SigNum != sigNum || wanted.SigDen != sigDen {
+		return ClipWriteOutput{}, actionable("signature_mismatch",
+			fmt.Sprintf("notation says sig=%d/%d but the song is %d/%d",
+				wanted.SigNum, wanted.SigDen, sigNum, sigDen),
+			"Read the clip with ableton_clip_read and keep the sig it reports.")
+	}
+
 	track, clip := int32(input.TrackIndex), int32(input.ClipIndex)
 	hasClip, err := queryBool(client, "/live/clip_slot/get/has_clip", track, clip)
 	if err != nil {
@@ -130,7 +149,7 @@ func writeClipNotation(client clipNotationClient, input ClipWriteInput) (ClipWri
 	}
 
 	if input.Rev == "" {
-		// Creating: there is nothing to compare against, so stages two and three
+		// Creating: there is nothing to compare against, so stages three and four
 		// do not apply. Refuse if a clip is already there rather than replacing it.
 		if hasClip {
 			return ClipWriteOutput{}, actionable("clip_exists",
@@ -152,7 +171,7 @@ func writeClipNotation(client clipNotationClient, input ClipWriteInput) (ClipWri
 				fmt.Sprintf("no clip in slot [%d,%d]", input.TrackIndex, input.ClipIndex),
 				"Send rev as an empty string to create the clip.")
 		}
-		// Stage two: refuse if the clip moved under us.
+		// Stage three: refuse if the clip moved under us.
 		current, err := loadClipForNotation(client, input.TrackIndex, input.ClipIndex)
 		if err != nil {
 			return ClipWriteOutput{}, err
@@ -167,7 +186,7 @@ func writeClipNotation(client clipNotationClient, input ClipWriteInput) (ClipWri
 					input.TrackIndex, input.ClipIndex, input.Rev, got),
 				"Read the clip again with ableton_clip_read and redo the edit on top of it.")
 		}
-		// Stage three: the header has to describe the clip that is actually there.
+		// Stage four: the header has to describe the clip that is actually there.
 		if current.Bars != wanted.Bars {
 			return ClipWriteOutput{}, actionable("bars_mismatch",
 				fmt.Sprintf("notation says bars=%d but the clip is %d bars", wanted.Bars, current.Bars),
@@ -175,7 +194,7 @@ func writeClipNotation(client clipNotationClient, input ClipWriteInput) (ClipWri
 		}
 	}
 
-	// Stage four: replace the notes wholesale, then the name.
+	// Stage five: replace the notes wholesale, then the name.
 	if err := client.Send("/live/clip/remove/notes", track, clip); err != nil {
 		return ClipWriteOutput{}, err
 	}

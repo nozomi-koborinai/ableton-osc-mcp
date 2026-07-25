@@ -145,6 +145,25 @@ func TestWriteClipNotationRejectsBadNotationBeforeTouchingLive(t *testing.T) {
 	}
 }
 
+func TestWriteClipNotationRejectsSignatureMismatch(t *testing.T) {
+	// Positions are counted in bars and beats, so notation written against a
+	// different signature lands every note somewhere else. The note comparison
+	// afterwards would still pass, which is exactly why this has to be caught up
+	// front rather than left to the verification step.
+	stub := newReadStub()
+	stub.sigNum, stub.sigDen = 3, 4
+	stub.length = 12
+
+	_, err := writeClipNotation(stub, ClipWriteInput{
+		Notation: "clip \"Chorus Lead\" bars=4 sig=4/4\n\n  2:1 C3 1/8 v100\n",
+		Rev:      "irrelevant",
+	})
+	assertActionable(t, err, "signature_mismatch")
+	if len(stub.sends) != 0 {
+		t.Errorf("nothing should have been sent to Live, got %v", stub.sends)
+	}
+}
+
 func TestWriteClipNotationRejectsStaleRev(t *testing.T) {
 	stub := newReadStub()
 	_, err := writeClipNotation(stub, ClipWriteInput{Notation: validNotation(), Rev: "000000000000"})
