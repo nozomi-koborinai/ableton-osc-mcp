@@ -58,8 +58,8 @@ func main() {
 	})
 
 	// Expose Genkit tools via MCP (stdio)
-	mcpServer := mcpinternal.NewMCPServer(g, "ableton-osc-mcp", version, toolList)
-	if err := mcpServer.ServeStdio(); err != nil {
+	mcpServer := mcpinternal.NewMCPServer("ableton-osc-mcp", version, toolList)
+	if err := mcpinternal.ServeStdio(mcpServer); err != nil {
 		log.Fatal(err)
 	}
 }

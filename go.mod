@@ -5,6 +5,7 @@ go 1.25.12
 require (
 	github.com/firebase/genkit/go v1.10.0
 	github.com/hypebeast/go-osc v0.0.0-20220308234300-cec5a8a1e5f5
+	github.com/mark3labs/mcp-go v0.43.2
 )
 
 require (
@@ -19,7 +20,6 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/invopop/jsonschema v0.13.0 // indirect
 	github.com/mailru/easyjson v0.9.1 // indirect
-	github.com/mark3labs/mcp-go v0.43.2 // indirect
 	github.com/mbleigh/raymond v0.0.0-20250414171441-6b3a58ab9e0a // indirect
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
