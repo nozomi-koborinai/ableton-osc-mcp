@@ -127,3 +127,19 @@ func TestCompareKeepsOutOfRangeAsAnEmptyList(t *testing.T) {
 		t.Errorf("out_of_range = %#v, want an empty non-nil list (JSON [] rather than null)", got.OutOfRange)
 	}
 }
+
+func TestCompareDoesNotReportNegativeZero(t *testing.T) {
+	t.Parallel()
+
+	// -0.004 rounds to zero; JSON would otherwise print it as "-0".
+	mine := twoBandMix(-10.004, 9, -10.004, -20, 0.5)
+	ref := twoBandMix(-10, 9, -10, -20, 0.5)
+
+	got := Compare(mine, ref, nil)
+	if got.BandDeltasDB[0].DeltaDB != 0 || math.Signbit(got.BandDeltasDB[0].DeltaDB) {
+		t.Errorf("band delta = %v (signbit %v), want plain 0", got.BandDeltasDB[0].DeltaDB, math.Signbit(got.BandDeltasDB[0].DeltaDB))
+	}
+	if math.Signbit(got.LUFSDelta) {
+		t.Errorf("lufs delta = %v, want plain 0", got.LUFSDelta)
+	}
+}

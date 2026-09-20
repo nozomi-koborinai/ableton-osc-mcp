@@ -183,6 +183,12 @@ func Compare(mine, ref audioanalyze.MixProfile, blend []Weight) Comparison {
 	return out
 }
 
+// round2 rounds to two decimals and folds negative zero into zero, which JSON
+// would otherwise print as "-0".
 func round2(v float64) float64 {
-	return math.Round(v*100) / 100
+	r := math.Round(v*100) / 100
+	if r == 0 {
+		return 0
+	}
+	return r
 }
