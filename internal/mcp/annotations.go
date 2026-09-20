@@ -102,6 +102,7 @@ var toolHints = map[string]hints{
 	"ableton_load_slice_preset":              {idempotent: true},
 	"ableton_load_splice_sample":             {},
 	"ableton_match_clip_tempo":               {},
+	"ableton_measure_mix":                    {},
 	"ableton_mute_track":                     {idempotent: true},
 	"ableton_osc_send":                       {destructive: true, idempotent: true},
 	"ableton_play":                           {idempotent: true},

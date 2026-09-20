@@ -24,7 +24,7 @@ func TestRegisterReturnsUniqueTools(t *testing.T) {
 		seen[name] = true
 	}
 
-	if len(seen) != 101 {
-		t.Errorf("tool count = %d, want 101", len(seen))
+	if len(seen) != 102 {
+		t.Errorf("tool count = %d, want 102", len(seen))
 	}
 }

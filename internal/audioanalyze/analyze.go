@@ -105,6 +105,28 @@ type Result struct {
 	Note              string            `json:"note"`
 }
 
+// ProbeDuration decodes a local WAV or AIFF file and returns its length in
+// seconds, without running any analysis.
+func ProbeDuration(path string) (float64, error) {
+	abs, err := validateLocalAudioPath(path)
+	if err != nil {
+		return 0, err
+	}
+	f, err := os.Open(abs)
+	if err != nil {
+		return 0, fmt.Errorf("open audio file: %w", err)
+	}
+	defer func() { _ = f.Close() }()
+	audio, _, err := loadAudio(io.LimitReader(f, maxFileBytes+1))
+	if err != nil {
+		return 0, err
+	}
+	if audio.sampleRate <= 0 {
+		return 0, errors.New("no audio samples decoded")
+	}
+	return float64(len(audio.mono)) / float64(audio.sampleRate), nil
+}
+
 // AnalyzeFile analyzes a local WAV or AIFF file already present on disk. It never
 // downloads or writes audio; callers must supply audio they have rights to use.
 func AnalyzeFile(path string, opts Options) (Result, error) {
