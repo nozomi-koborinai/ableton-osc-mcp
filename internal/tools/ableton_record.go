@@ -321,7 +321,7 @@ func NewAbletonBounceSessionPass(g *genkit.Genkit, client *abletonosc.Client) ai
 	)
 }
 
-func ensureNamedAudioTrack(client *abletonosc.Client, name string) (int, error) {
+func ensureNamedAudioTrack(client recordClient, name string) (int, error) {
 	namesRes, err := client.Query("/live/song/get/track_names")
 	if err != nil {
 		return -1, err
@@ -351,7 +351,7 @@ func ensureNamedAudioTrack(client *abletonosc.Client, name string) (int, error) 
 	return idx, nil
 }
 
-func pickResamplingRouting(client *abletonosc.Client, trackIndex int) (string, error) {
+func pickResamplingRouting(client recordClient, trackIndex int) (string, error) {
 	avail, err := client.Query("/live/track/get/available_input_routing_types", int32(trackIndex))
 	if err != nil {
 		return "", err
