@@ -7,9 +7,26 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
+// Option adjusts how NewMCPServer runs tools.
+type Option func(*options)
+
+type options struct {
+	callScope func() func()
+}
+
+// WithCallScope runs open before every tool call and the func it returns once
+// the call is over, whether it succeeded or not.
+func WithCallScope(open func() func()) Option {
+	return func(o *options) { o.callScope = open }
+}
+
 // NewMCPServer builds an MCP server that exposes the given Genkit tools with
 // their schemas intact. Duplicate names are skipped with a warning.
-func NewMCPServer(name string, version string, toolList []ai.Tool) *server.MCPServer {
+func NewMCPServer(name string, version string, toolList []ai.Tool, opts ...Option) *server.MCPServer {
+	var o options
+	for _, opt := range opts {
+		opt(&o)
+	}
 	if version == "" {
 		version = "1.0.0"
 	}
@@ -27,7 +44,7 @@ func NewMCPServer(name string, version string, toolList []ai.Tool) *server.MCPSe
 			log.Printf("Skipping tool %s: %v", def.Name, err)
 			continue
 		}
-		s.AddTool(converted, newToolHandler(tl))
+		s.AddTool(converted, newToolHandler(tl, o.callScope))
 		seen[def.Name] = true
 		log.Printf("Exposing tool: %s", def.Name)
 	}

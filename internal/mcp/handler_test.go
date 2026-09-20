@@ -40,7 +40,7 @@ func TestToolHandlerReturnsJSON(t *testing.T) {
 		},
 	)
 
-	handler := newToolHandler(tool)
+	handler := newToolHandler(tool, nil)
 	req := mcp.CallToolRequest{}
 	req.Params.Name = "probe_double"
 	req.Params.Arguments = map[string]any{"value": 21}
@@ -70,7 +70,7 @@ func TestToolHandlerReportsErrors(t *testing.T) {
 		},
 	)
 
-	handler := newToolHandler(tool)
+	handler := newToolHandler(tool, nil)
 	req := mcp.CallToolRequest{}
 	req.Params.Name = "probe_fail"
 	req.Params.Arguments = map[string]any{"value": 1}

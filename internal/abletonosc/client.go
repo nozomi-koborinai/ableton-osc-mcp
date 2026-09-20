@@ -7,10 +7,21 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/hypebeast/go-osc/osc"
 )
+
+// defaultIdleRelease is how long the reply port stays bound after the last
+// OSC message. The server is registered globally in most MCP clients, so a
+// session that touched Live once must not lock every later session out.
+const defaultIdleRelease = 60 * time.Second
+
+// ErrReplyPortInUse reports that another process holds the UDP port AbletonOSC
+// replies to. AbletonOSC sends every reply to that one fixed port, so only one
+// client per machine can receive them at a time.
+var ErrReplyPortInUse = errors.New("AbletonOSC reply port is in use")
 
 type waitItem struct {
 	ch    chan []interface{}
@@ -19,17 +30,24 @@ type waitItem struct {
 
 type Client struct {
 	remoteAddr *net.UDPAddr
+	localAddr  string
+	localPort  int
 	timeout    time.Duration
 
-	conn net.PacketConn
+	connMu    sync.Mutex
+	conn      net.PacketConn
+	idleAfter time.Duration
+	idleTimer *time.Timer
+	lastUsed  time.Time
+	holds     int
 
 	mu      sync.Mutex
 	pending map[string][]waitItem
 }
 
-// NewClient binds one UDP socket for both send and receive.
-// AbletonOSC always replies to localPort (default 11001); using a single
-// socket avoids missed replies when send uses a separate ephemeral port.
+// NewClient prepares a client without touching the network. The reply port is
+// bound on first use (see ensureConn), so the MCP server can start even while
+// another instance holds the port.
 func NewClient(remoteHost string, remotePort int, localPort int, timeout time.Duration) (*Client, error) {
 	if remoteHost == "" {
 		return nil, errors.New("remoteHost is empty")
@@ -49,29 +67,84 @@ func NewClient(remoteHost string, remotePort int, localPort int, timeout time.Du
 		return nil, fmt.Errorf("resolve remote: %w", err)
 	}
 
-	// Bind IPv4 loopback explicitly. Listening on 0.0.0.0 can end up IPv6-only
-	// on newer Go/macOS and miss AbletonOSC replies to 127.0.0.1.
-	localAddr := fmt.Sprintf("127.0.0.1:%d", localPort)
-	conn, err := net.ListenPacket("udp", localAddr)
-	if err != nil {
-		return nil, fmt.Errorf("listen %s: %w", localAddr, err)
-	}
-
-	c := &Client{
+	return &Client{
 		remoteAddr: remoteAddr,
-		timeout:    timeout,
-		conn:       conn,
-		pending:    make(map[string][]waitItem),
-	}
-
-	go c.readLoop()
-	return c, nil
+		// Bind IPv4 loopback explicitly. Listening on 0.0.0.0 can end up IPv6-only
+		// on newer Go/macOS and miss AbletonOSC replies to 127.0.0.1.
+		localAddr: fmt.Sprintf("127.0.0.1:%d", localPort),
+		localPort: localPort,
+		timeout:   timeout,
+		idleAfter: defaultIdleRelease,
+		pending:   make(map[string][]waitItem),
+	}, nil
 }
 
-func (c *Client) readLoop() {
+// ensureConn binds one UDP socket for both send and receive.
+// AbletonOSC always replies to localPort (default 11001); using a single
+// socket avoids missed replies when send uses a separate ephemeral port.
+func (c *Client) ensureConn() (net.PacketConn, error) {
+	c.connMu.Lock()
+	defer c.connMu.Unlock()
+	c.lastUsed = time.Now()
+	if c.conn != nil {
+		return c.conn, nil
+	}
+	conn, err := net.ListenPacket("udp", c.localAddr)
+	if err != nil {
+		if isAddrInUse(err) {
+			return nil, fmt.Errorf("%w: UDP %s is held by another process, most likely an ableton-osc-mcp "+
+				"started by a different Claude/Cursor session. Close that session (or find the holder with "+
+				"`lsof -nP -iUDP:%d`), then call again; this server re-binds on the next call",
+				ErrReplyPortInUse, c.localAddr, c.localPort)
+		}
+		return nil, fmt.Errorf("listen %s: %w", c.localAddr, err)
+	}
+	c.conn = conn
+	go c.readLoop(conn)
+	c.idleTimer = time.AfterFunc(c.idleAfter, c.releaseIfIdle)
+	return conn, nil
+}
+
+// releaseIfIdle frees the reply port once nothing has used it for idleAfter.
+// The next Send or Query binds it again.
+func (c *Client) releaseIfIdle() {
+	c.connMu.Lock()
+	defer c.connMu.Unlock()
+	if c.conn == nil {
+		return
+	}
+	wait := c.idleAfter - time.Since(c.lastUsed)
+	if wait <= 0 && (c.holds > 0 || c.hasPending()) {
+		wait = c.idleAfter // a tool is mid-run, or a reply may still be on its way
+	}
+	if wait > 0 {
+		c.idleTimer = time.AfterFunc(wait, c.releaseIfIdle)
+		return
+	}
+	_ = c.conn.Close()
+	c.conn = nil
+}
+
+func (c *Client) hasPending() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return len(c.pending) > 0
+}
+
+// isAddrInUse covers both EADDRINUSE (Unix) and WSAEADDRINUSE (Windows, 10048),
+// which Go does not fold into one errno.
+func isAddrInUse(err error) bool {
+	if errors.Is(err, syscall.EADDRINUSE) {
+		return true
+	}
+	var errno syscall.Errno
+	return errors.As(err, &errno) && errno == 10048
+}
+
+func (c *Client) readLoop(conn net.PacketConn) {
 	buf := make([]byte, 65535)
 	for {
-		n, _, err := c.conn.ReadFrom(buf)
+		n, _, err := conn.ReadFrom(buf)
 		if err != nil {
 			if errors.Is(err, net.ErrClosed) {
 				return
@@ -103,10 +176,17 @@ func (c *Client) dispatchPacket(packet osc.Packet) {
 }
 
 func (c *Client) Close() error {
-	if c.conn != nil {
-		return c.conn.Close()
+	c.connMu.Lock()
+	defer c.connMu.Unlock()
+	if c.idleTimer != nil {
+		c.idleTimer.Stop()
 	}
-	return nil
+	if c.conn == nil {
+		return nil
+	}
+	err := c.conn.Close()
+	c.conn = nil
+	return err
 }
 
 func (c *Client) Send(address string, args ...interface{}) error {
@@ -119,7 +199,11 @@ func (c *Client) Send(address string, args ...interface{}) error {
 	if err != nil {
 		return err
 	}
-	_, err = c.conn.WriteTo(data, c.remoteAddr)
+	conn, err := c.ensureConn()
+	if err != nil {
+		return err
+	}
+	_, err = conn.WriteTo(data, c.remoteAddr)
 	return err
 }
 
@@ -196,5 +280,24 @@ func (c *Client) handleMessage(msg *osc.Message) {
 	select {
 	case w.ch <- msg.Arguments:
 	default:
+	}
+}
+
+// Hold keeps the reply port bound until the returned func is called, however
+// quiet the client is in between. The MCP layer wraps every tool call in a
+// Hold so a tool that waits out several bars cannot lose the port mid-run.
+func (c *Client) Hold() func() {
+	c.connMu.Lock()
+	c.holds++
+	c.connMu.Unlock()
+
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			c.connMu.Lock()
+			c.holds--
+			c.lastUsed = time.Now() // the idle window starts when the tool ends
+			c.connMu.Unlock()
+		})
 	}
 }
