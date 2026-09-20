@@ -10,9 +10,13 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-// newToolHandler runs a Genkit tool and returns its output as JSON.
-func newToolHandler(tool ai.Tool) server.ToolHandlerFunc {
+// newToolHandler runs a Genkit tool and returns its output as JSON. callScope
+// may be nil; otherwise it brackets the run (see WithCallScope).
+func newToolHandler(tool ai.Tool, callScope func() func()) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		if callScope != nil {
+			defer callScope()()
+		}
 		out, err := tool.RunRaw(ctx, req.GetArguments())
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil

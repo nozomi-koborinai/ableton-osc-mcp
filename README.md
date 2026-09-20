@@ -477,6 +477,16 @@ In most cases, the default settings work fine. Change these only if:
 
 </details>
 
+## Running more than one session
+
+AbletonOSC sends every reply to one fixed UDP port (`11001` by default), so only one process per machine can receive replies at a time. MCP clients usually start this server for every session, whether or not the session touches Live, so the server is careful with that port:
+
+- it binds the port on the first tool call, not at startup — a session that never uses an Ableton tool never takes it
+- it releases the port after 60 seconds without a tool call
+- it keeps the port for the whole length of a tool call, however long the tool waits (auditions, bounces)
+
+If a tool fails with `AbletonOSC reply port is in use`, another process is talking to Live right now — usually an `ableton-osc-mcp` started by a different Claude/Cursor session. Close that session or let it go quiet, then call again; no restart is needed. `ableton_diagnose` reports the same condition as `reply_port_busy: true`, and `lsof -nP -iUDP:11001` shows the holder.
+
 ## Splice samples (local library)
 
 This does **not** call the Splice cloud API or download new sounds. It uses samples already synced by the Splice desktop app.

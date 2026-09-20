@@ -2,9 +2,12 @@ package tools
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/nozomi-koborinai/ableton-osc-mcp/internal/abletonosc"
 )
 
 type diagnoseQuerierStub struct {
@@ -186,6 +189,47 @@ func TestDiagnoseCreateAudioClipOnLive12(t *testing.T) {
 	for _, c := range got.Capabilities {
 		if c.Name == "create_audio_clip" && !c.OK {
 			t.Fatalf("create_audio_clip should be ok on Live 12: %+v", c)
+		}
+	}
+}
+
+// busyReplyPortQuerier fails every query the way abletonosc.Client does while
+// another process holds the reply port.
+type busyReplyPortQuerier struct{}
+
+func (busyReplyPortQuerier) Query(string, ...interface{}) ([]interface{}, error) {
+	return nil, fmt.Errorf("%w: UDP 127.0.0.1:11001 is held by another process", abletonosc.ErrReplyPortInUse)
+}
+
+func TestDiagnoseBusyReplyPortDoesNotBlameLiveOrPatches(t *testing.T) {
+	t.Parallel()
+
+	got := diagnoseAbleton(busyReplyPortQuerier{}, DiagnoseSettings{
+		Host:       "127.0.0.1",
+		Port:       11000,
+		ClientPort: 11001,
+		Timeout:    500 * time.Millisecond,
+	})
+
+	if got.Ready || got.Connected {
+		t.Fatalf("ready=%v connected=%v, want both false", got.Ready, got.Connected)
+	}
+	if !got.ReplyPortBusy {
+		t.Error("ReplyPortBusy = false, want true")
+	}
+	if len(got.Recommendations) == 0 || !strings.Contains(got.Recommendations[0], "11001") {
+		t.Errorf("first recommendation should name the busy port 11001, got %q", got.Recommendations)
+	}
+	// Nothing is known about Live or the patches while replies cannot arrive,
+	// so advice to reinstall them would send the person to the wrong fix.
+	for _, rec := range got.Recommendations {
+		if strings.Contains(rec, "patch") || strings.Contains(rec, "Control Surface") {
+			t.Errorf("misleading recommendation while the reply port is busy: %q", rec)
+		}
+	}
+	for _, c := range got.Capabilities {
+		if strings.Contains(c.NextStep, "patch") {
+			t.Errorf("capability %s advises %q while the reply port is busy", c.Name, c.NextStep)
 		}
 	}
 }

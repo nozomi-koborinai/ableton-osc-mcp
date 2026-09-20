@@ -57,8 +57,10 @@ func main() {
 		Splice: tools.SpliceLibrarySettings{ConfiguredPath: cfg.SplicePath},
 	})
 
-	// Expose Genkit tools via MCP (stdio)
-	mcpServer := mcpinternal.NewMCPServer("ableton-osc-mcp", version, toolList)
+	// Expose Genkit tools via MCP (stdio). The reply port is bound on the first
+	// tool call and held for the length of each call; see abletonosc.Client.Hold.
+	mcpServer := mcpinternal.NewMCPServer("ableton-osc-mcp", version, toolList,
+		mcpinternal.WithCallScope(ableton.Hold))
 	if err := mcpinternal.ServeStdio(mcpServer); err != nil {
 		log.Fatal(err)
 	}

@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -47,6 +48,7 @@ type CapabilityInfo struct {
 type DiagnoseOutput struct {
 	Ready           bool                 `json:"ready" jsonschema:"description=true when AbletonOSC\\, browser patch\\, and master patch all respond"`
 	Connected       bool                 `json:"connected" jsonschema:"description=true when stock AbletonOSC /live/test responds"`
+	ReplyPortBusy   bool                 `json:"reply_port_busy" jsonschema:"description=true when another process holds the UDP reply port\\, so nothing about Live or the patches could be checked"`
 	BrowserPatch    bool                 `json:"browser_patch"`
 	MasterPatch     bool                 `json:"master_patch"`
 	LiveVersion     *LiveVersionInfo     `json:"live_version,omitempty"`
@@ -87,9 +89,19 @@ func diagnoseAbleton(client diagnoseQuerier, settings DiagnoseSettings) Diagnose
 		Recommendations: []string{},
 	}
 
-	oscCheck := probeAbletonOSC(client)
+	oscCheck, oscErr := probeAbletonOSC(client)
 	out.Checks = append(out.Checks, oscCheck)
 	out.Connected = oscCheck.OK
+	if errors.Is(oscErr, abletonosc.ErrReplyPortInUse) {
+		// Replies cannot arrive, so nothing below could tell a missing patch
+		// from a busy port. Stop here rather than advise reinstalling things.
+		out.ReplyPortBusy = true
+		out.Recommendations = []string{fmt.Sprintf(
+			"UDP reply port %d is held by another process, most likely an ableton-osc-mcp started by a different Claude/Cursor session. "+
+				"Close that session (or find the holder with `lsof -nP -iUDP:%d`), then call again; this server does not need a restart.",
+			settings.ClientPort, settings.ClientPort)}
+		return out
+	}
 
 	browserCheck := probeBrowserPatch(client)
 	out.Checks = append(out.Checks, browserCheck)
@@ -114,20 +126,20 @@ func diagnoseAbleton(client diagnoseQuerier, settings DiagnoseSettings) Diagnose
 	return out
 }
 
-func probeAbletonOSC(client diagnoseQuerier) DiagnoseCheck {
+func probeAbletonOSC(client diagnoseQuerier) (DiagnoseCheck, error) {
 	res, err := client.Query("/live/test")
 	if err != nil {
 		return DiagnoseCheck{
 			Name:   "ableton_osc",
 			OK:     false,
 			Detail: formatProbeError(err),
-		}
+		}, err
 	}
 	detail := "ok"
 	if len(res) > 0 {
 		detail = fmt.Sprint(res[0])
 	}
-	return DiagnoseCheck{Name: "ableton_osc", OK: true, Detail: detail}
+	return DiagnoseCheck{Name: "ableton_osc", OK: true, Detail: detail}, nil
 }
 
 func probeBrowserPatch(client diagnoseQuerier) DiagnoseCheck {
