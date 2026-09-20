@@ -21,8 +21,18 @@ type TrackBoolInput struct {
 }
 
 type SetTrackVolumeInput struct {
-	TrackIndex int     `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
-	Volume     float64 `json:"volume" jsonschema:"description=Volume (0.0=silence to 1.0=0dB),minimum=0,maximum=1"`
+	TrackIndex int      `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
+	Volume     *float64 `json:"volume,omitempty" jsonschema:"description=Raw fader position 0.0-1.0 (0.85 = 0 dB). Give exactly one of volume\\, db\\, delta_db,minimum=0,maximum=1"`
+	DB         *float64 `json:"db,omitempty" jsonschema:"description=Absolute level in dB as Live displays it (e.g. -6). -70 or lower means silence"`
+	DeltaDB    *float64 `json:"delta_db,omitempty" jsonschema:"description=Change from the current level in dB (e.g. -2 turns it down 2 dB)"`
+}
+
+// MixerLevelOutput reports a mixer level after a change.
+type MixerLevelOutput struct {
+	TrackIndex *int    `json:"track_index,omitempty"`
+	SendIndex  *int    `json:"send_index,omitempty"`
+	Value      float64 `json:"value" jsonschema:"description=Raw position after the change (0.0-1.0)"`
+	Display    string  `json:"display,omitempty" jsonschema:"description=The level as Live shows it\\, e.g. -6.0 dB. Missing when the dB mixer patch is not installed"`
 }
 
 type TrackNamesInput struct {
@@ -162,20 +172,25 @@ func NewAbletonSoloTrack(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
 }
 
 func NewAbletonSetTrackVolume(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
-	return genkit.DefineTool(g, "ableton_set_track_volume", "Ableton Live: set track volume (0.0=silence, 0.85=0dB, 1.0=+6dB)",
-		func(_ *ai.ToolContext, input SetTrackVolumeInput) (SentOutput, error) {
-			if input.TrackIndex < 0 {
-				return SentOutput{}, errors.New("track_index must be >= 0")
-			}
-			if input.Volume < 0 || input.Volume > 1 {
-				return SentOutput{}, errors.New("volume must be 0.0 to 1.0")
-			}
-			if err := client.Send("/live/track/set/volume", int32(input.TrackIndex), float32(input.Volume)); err != nil {
-				return SentOutput{}, err
-			}
-			return SentOutput{Sent: true}, nil
+	return genkit.DefineTool(g, "ableton_set_track_volume",
+		"Ableton Live: set a track's volume as dB (`db`), as a change in dB (`delta_db`), or as a raw fader position (`volume`, 0.85 = 0 dB). Returns the level Live now displays.",
+		func(_ *ai.ToolContext, input SetTrackVolumeInput) (MixerLevelOutput, error) {
+			return setTrackVolume(client, input)
 		},
 	)
+}
+
+func setTrackVolume(c mixerDBClient, input SetTrackVolumeInput) (MixerLevelOutput, error) {
+	if input.TrackIndex < 0 {
+		return MixerLevelOutput{}, errors.New("track_index must be >= 0")
+	}
+	level, err := applyLevelChange(c, trackVolumeTarget(input.TrackIndex),
+		levelChange{Raw: input.Volume, DB: input.DB, DeltaDB: input.DeltaDB}, "volume")
+	if err != nil {
+		return MixerLevelOutput{}, err
+	}
+	track := input.TrackIndex
+	return MixerLevelOutput{TrackIndex: &track, Value: level.Raw, Display: level.Display}, nil
 }
 
 func NewAbletonGetTrackDevices(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {

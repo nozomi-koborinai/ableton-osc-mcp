@@ -112,6 +112,7 @@ type TrackSend struct {
 	SendIndex  int     `json:"send_index"`
 	ReturnName string  `json:"return_name,omitempty"`
 	Value      float64 `json:"value" jsonschema:"description=Normalized send amount (~0..1; ~0.85 ≈ 0 dB)"`
+	Display    string  `json:"display,omitempty" jsonschema:"description=The send level as Live shows it\\, e.g. -12.0 dB (needs the dB mixer patch)"`
 }
 
 type GetTrackSendsInput struct {
@@ -125,91 +126,85 @@ type GetTrackSendsOutput struct {
 
 func NewAbletonGetTrackSends(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
 	return genkit.DefineTool(g, "ableton_get_track_sends",
-		"Ableton Live: get all send amounts on a track. send_index matches return track order (0=A, 1=B, …). Values are normalized (~0..1).",
+		"Ableton Live: get all send amounts on a track, raw (~0..1) and as Live displays them in dB. send_index matches return track order (0=A, 1=B, …).",
 		func(_ *ai.ToolContext, input GetTrackSendsInput) (GetTrackSendsOutput, error) {
-			if input.TrackIndex < 0 {
-				return GetTrackSendsOutput{}, errors.New("track_index must be >= 0")
-			}
-			returns := []ReturnTrack{}
-			if res, err := client.Query("/live/song/get/return_tracks"); err == nil {
-				if parsed, perr := parseReturnTracks(res); perr == nil {
-					returns = parsed.Returns
-				}
-			}
-			n := len(returns)
-			if n == 0 {
-				// Fall back: probe send 0; if it fails, no returns.
-				if _, err := client.Query("/live/track/get/send", int32(input.TrackIndex), int32(0)); err != nil {
-					return GetTrackSendsOutput{TrackIndex: input.TrackIndex, Sends: []TrackSend{}}, nil
-				}
-				n = 1
-			}
-			sends := make([]TrackSend, 0, n)
-			for i := 0; i < n; i++ {
-				res, err := client.Query("/live/track/get/send", int32(input.TrackIndex), int32(i))
-				if err != nil {
-					break
-				}
-				if err := ensureResponseLen(res, 3); err != nil {
-					return GetTrackSendsOutput{}, err
-				}
-				val, err := abletonosc.AsFloat64(res[2])
-				if err != nil {
-					return GetTrackSendsOutput{}, err
-				}
-				s := TrackSend{SendIndex: i, Value: val}
-				if i < len(returns) {
-					s.ReturnName = returns[i].Name
-				}
-				sends = append(sends, s)
-			}
-			return GetTrackSendsOutput{TrackIndex: input.TrackIndex, Sends: sends}, nil
+			return getTrackSends(client, input)
 		},
 	)
 }
 
-type SetTrackSendInput struct {
-	TrackIndex int     `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
-	SendIndex  int     `json:"send_index" jsonschema:"description=Return index (0=A\\, 1=B\\, …),minimum=0"`
-	Value      float64 `json:"value" jsonschema:"description=Normalized send amount (~0..1; ~0.85 ≈ 0 dB)"`
+func getTrackSends(client mixerDBClient, input GetTrackSendsInput) (GetTrackSendsOutput, error) {
+	if input.TrackIndex < 0 {
+		return GetTrackSendsOutput{}, errors.New("track_index must be >= 0")
+	}
+	returns := []ReturnTrack{}
+	if res, err := client.Query("/live/song/get/return_tracks"); err == nil {
+		if parsed, perr := parseReturnTracks(res); perr == nil {
+			returns = parsed.Returns
+		}
+	}
+	n := len(returns)
+	if n == 0 {
+		// Fall back: probe send 0; if it fails, no returns.
+		if _, err := client.Query("/live/track/get/send", int32(input.TrackIndex), int32(0)); err != nil {
+			return GetTrackSendsOutput{TrackIndex: input.TrackIndex, Sends: []TrackSend{}}, nil
+		}
+		n = 1
+	}
+	sends := make([]TrackSend, 0, n)
+	for i := 0; i < n; i++ {
+		res, err := client.Query("/live/track/get/send", int32(input.TrackIndex), int32(i))
+		if err != nil {
+			break
+		}
+		if err := ensureResponseLen(res, 3); err != nil {
+			return GetTrackSendsOutput{}, err
+		}
+		val, err := abletonosc.AsFloat64(res[2])
+		if err != nil {
+			return GetTrackSendsOutput{}, err
+		}
+		s := TrackSend{SendIndex: i, Value: val}
+		if i < len(returns) {
+			s.ReturnName = returns[i].Name
+		}
+		// The display is a bonus: an old patch just leaves it out.
+		if level, err := queryMixerLevel(client, trackSendTarget(input.TrackIndex, i)); err == nil {
+			s.Display = level.Display
+		}
+		sends = append(sends, s)
+	}
+	return GetTrackSendsOutput{TrackIndex: input.TrackIndex, Sends: sends}, nil
 }
 
-type SetTrackSendOutput struct {
-	TrackIndex int     `json:"track_index"`
-	SendIndex  int     `json:"send_index"`
-	Value      float64 `json:"value"`
+type SetTrackSendInput struct {
+	TrackIndex int      `json:"track_index" jsonschema:"description=Track index (0-based regular tracks),minimum=0"`
+	SendIndex  int      `json:"send_index" jsonschema:"description=Return index (0=A\\, 1=B\\, …),minimum=0"`
+	Value      *float64 `json:"value,omitempty" jsonschema:"description=Raw send amount 0.0-1.0. Give exactly one of value\\, db\\, delta_db,minimum=0,maximum=1"`
+	DB         *float64 `json:"db,omitempty" jsonschema:"description=Absolute send level in dB as Live displays it (e.g. -12). -70 or lower means off"`
+	DeltaDB    *float64 `json:"delta_db,omitempty" jsonschema:"description=Change from the current send level in dB"`
 }
 
 func NewAbletonSetTrackSend(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
 	return genkit.DefineTool(g, "ableton_set_track_send",
-		"Ableton Live: set a track's send amount to a return (send_index 0=A, 1=B, …). Value is normalized (~0..1; ~0.85 ≈ 0 dB). Confirms by reading back.",
-		func(_ *ai.ToolContext, input SetTrackSendInput) (SetTrackSendOutput, error) {
-			if input.TrackIndex < 0 || input.SendIndex < 0 {
-				return SetTrackSendOutput{}, errors.New("track_index and send_index must be >= 0")
-			}
-			if err := client.Send("/live/track/set/send",
-				int32(input.TrackIndex), int32(input.SendIndex), float32(input.Value),
-			); err != nil {
-				return SetTrackSendOutput{}, err
-			}
-			res, err := client.Query("/live/track/get/send", int32(input.TrackIndex), int32(input.SendIndex))
-			if err != nil {
-				return SetTrackSendOutput(input), nil
-			}
-			if err := ensureResponseLen(res, 3); err != nil {
-				return SetTrackSendOutput{}, err
-			}
-			val, err := abletonosc.AsFloat64(res[2])
-			if err != nil {
-				return SetTrackSendOutput{}, err
-			}
-			return SetTrackSendOutput{
-				TrackIndex: input.TrackIndex,
-				SendIndex:  input.SendIndex,
-				Value:      val,
-			}, nil
+		"Ableton Live: set a track's send to a return (send_index 0=A, 1=B, …) as dB (`db`), as a change in dB (`delta_db`), or as a raw amount (`value`, 0.0-1.0). Returns the level Live now displays.",
+		func(_ *ai.ToolContext, input SetTrackSendInput) (MixerLevelOutput, error) {
+			return setTrackSend(client, input)
 		},
 	)
+}
+
+func setTrackSend(c mixerDBClient, input SetTrackSendInput) (MixerLevelOutput, error) {
+	if input.TrackIndex < 0 || input.SendIndex < 0 {
+		return MixerLevelOutput{}, errors.New("track_index and send_index must be >= 0")
+	}
+	level, err := applyLevelChange(c, trackSendTarget(input.TrackIndex, input.SendIndex),
+		levelChange{Raw: input.Value, DB: input.DB, DeltaDB: input.DeltaDB}, "value")
+	if err != nil {
+		return MixerLevelOutput{}, err
+	}
+	track, send := input.TrackIndex, input.SendIndex
+	return MixerLevelOutput{TrackIndex: &track, SendIndex: &send, Value: level.Raw, Display: level.Display}, nil
 }
 
 // --- Device sidechain (Compressor input routing) ---

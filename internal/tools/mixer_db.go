@@ -158,7 +158,7 @@ func mixerStatusError(payload []interface{}) error {
 }
 
 // queryMixerLevel reads a level the way Live displays it.
-func queryMixerLevel(c mixerDBClient, t mixerTarget) (mixerLevel, error) {
+func queryMixerLevel(c oscQuerier, t mixerTarget) (mixerLevel, error) {
 	res, err := c.Query(t.levelAddress(), t.indexArgs()...)
 	if err != nil {
 		return mixerLevel{}, mixerQueryError(err)
@@ -184,7 +184,7 @@ func levelFromReply(display, raw interface{}) (mixerLevel, error) {
 }
 
 // resolveRawForDB asks Live which raw position displays as db. Nothing changes.
-func resolveRawForDB(c mixerDBClient, t mixerTarget, db float64) (float64, error) {
+func resolveRawForDB(c oscQuerier, t mixerTarget, db float64) (float64, error) {
 	args := append(t.indexArgs(), float32(db))
 	res, err := c.Query(t.resolveAddress(), args...)
 	if err != nil {
@@ -270,7 +270,7 @@ func invalidLevelChange(rawField, detail string) error {
 }
 
 // queryTrackVolumesDB reads every track's volume in one reply, in track order.
-func queryTrackVolumesDB(c mixerDBClient) ([]mixerLevel, error) {
+func queryTrackVolumesDB(c oscQuerier) ([]mixerLevel, error) {
 	res, err := c.Query("/live/song/get/track_volumes_db")
 	if err != nil {
 		return nil, mixerQueryError(err)

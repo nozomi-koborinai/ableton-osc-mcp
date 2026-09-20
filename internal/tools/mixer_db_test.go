@@ -119,6 +119,15 @@ func (f *fakeMixer) Query(address string, args ...interface{}) ([]interface{}, e
 	case "/live/master/get/volume_for_db":
 		raw, status := fakeRawForDB(floatArg(0))
 		return []interface{}{float32(raw), fakeFaderDisplay(raw), status}, nil
+	case "/live/song/get/return_tracks":
+		return []interface{}{int32(2), "A-Reverb", "B-Delay"}, nil
+	case "/live/track/get/send":
+		t, s := intArg(0), intArg(1)
+		raw, ok := f.sends[[2]int{t, s}]
+		if !ok {
+			return nil, errors.New("no response received to query: " + address)
+		}
+		return []interface{}{int32(t), int32(s), float32(raw)}, nil
 	case "/live/song/get/track_names":
 		names := make([]interface{}, len(f.volumes))
 		for i := range names {
