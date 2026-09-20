@@ -45,7 +45,7 @@ func loadAIFF(f io.Reader) (wavAudio, error) {
 		if chunkID == "SSND" {
 			// Trust the declared size so chunks after the sound data (markers,
 			// ID3) are not decoded as audio; a zero size means "to the end".
-			var src io.Reader = f
+			src := f
 			if chunkSize > 0 {
 				src = io.LimitReader(f, int64(chunkSize))
 			}
