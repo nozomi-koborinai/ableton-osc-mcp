@@ -11,7 +11,7 @@ import (
 func TestAnalyzeAudioURLRejectsNonURL(t *testing.T) {
 	t.Parallel()
 
-	_, err := audioanalyze.AnalyzeURL(context.Background(), "/local/file.wav", 0)
+	_, err := audioanalyze.AnalyzeURL(context.Background(), "/local/file.wav", audioanalyze.Options{})
 	if err == nil {
 		t.Fatal("expected rejection for non-http input")
 	}

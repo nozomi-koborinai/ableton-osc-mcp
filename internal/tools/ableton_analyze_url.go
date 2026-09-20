@@ -52,7 +52,7 @@ func NewAbletonAnalyzeAudioURL(g *genkit.Genkit) ai.Tool {
 			if input.ProjectTempo != nil {
 				projectTempo = *input.ProjectTempo
 			}
-			got, err := audioanalyze.AnalyzeURL(tc, input.URL, projectTempo)
+			got, err := audioanalyze.AnalyzeURL(tc, input.URL, audioanalyze.Options{ProjectTempo: projectTempo})
 			if err != nil {
 				return AnalyzeAudioURLOutput{}, err
 			}

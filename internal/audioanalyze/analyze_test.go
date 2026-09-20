@@ -11,11 +11,11 @@ import (
 func TestValidateRejectsURL(t *testing.T) {
 	t.Parallel()
 
-	_, err := AnalyzeFile("https://example.com/a.wav", 0)
+	_, err := AnalyzeFile("https://example.com/a.wav", Options{})
 	if err == nil {
 		t.Fatal("expected URL rejection")
 	}
-	_, err = AnalyzeFile("relative/a.wav", 0)
+	_, err = AnalyzeFile("relative/a.wav", Options{})
 	if err == nil {
 		t.Fatal("expected relative path rejection")
 	}
@@ -26,7 +26,7 @@ func TestAnalyzeClickTrackBPM(t *testing.T) {
 
 	path := filepath.Join(t.TempDir(), "clicks_120.wav")
 	writeClickWAV(t, path, 44100, 120, 4)
-	got, err := AnalyzeFile(path, 120)
+	got, err := AnalyzeFile(path, Options{ProjectTempo: 120})
 	if err != nil {
 		t.Fatalf("AnalyzeFile() error = %v", err)
 	}
@@ -110,7 +110,7 @@ func TestDetectOnsetsClickTrack(t *testing.T) {
 
 	path := filepath.Join(t.TempDir(), "clicks_120.wav")
 	writeClickWAV(t, path, 44100, 120, 4)
-	got, err := AnalyzeFile(path, 120)
+	got, err := AnalyzeFile(path, Options{ProjectTempo: 120})
 	if err != nil {
 		t.Fatalf("AnalyzeFile() error = %v", err)
 	}

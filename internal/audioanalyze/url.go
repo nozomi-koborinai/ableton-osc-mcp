@@ -26,7 +26,7 @@ const (
 //
 // The user is responsible for the legality of accessing the URL: yt-dlp
 // touches the source site directly and some sites' terms prohibit this.
-func AnalyzeURL(ctx context.Context, rawURL string, projectTempo float64) (Result, error) {
+func AnalyzeURL(ctx context.Context, rawURL string, opts Options) (Result, error) {
 	clean, err := validateAudioURL(rawURL)
 	if err != nil {
 		return Result{}, err
@@ -88,7 +88,7 @@ func AnalyzeURL(ctx context.Context, rawURL string, projectTempo float64) (Resul
 	_ = dlWaitErr
 	_ = ffWaitErr
 
-	out, err := analyzeWAVStream(bytes.NewReader(wav), projectTempo)
+	out, err := analyzeStream(bytes.NewReader(wav), opts)
 	if err != nil {
 		return Result{}, err
 	}

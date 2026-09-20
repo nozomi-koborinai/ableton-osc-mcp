@@ -59,7 +59,7 @@ func analyzeLocalAudio(input AnalyzeLocalAudioInput) (AnalyzeLocalAudioOutput, e
 	if input.ProjectTempo != nil {
 		projectTempo = *input.ProjectTempo
 	}
-	got, err := audioanalyze.AnalyzeFile(input.Path, projectTempo)
+	got, err := audioanalyze.AnalyzeFile(input.Path, audioanalyze.Options{ProjectTempo: projectTempo})
 	if err != nil {
 		return AnalyzeLocalAudioOutput{}, err
 	}
