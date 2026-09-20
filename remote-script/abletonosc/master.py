@@ -2,6 +2,7 @@
 
 from typing import Any, Tuple
 
+from .browser import find_value_for_db
 from .handler import AbletonOSCHandler
 
 
@@ -19,6 +20,24 @@ class MasterHandler(AbletonOSCHandler):
 
         def set_volume(params: Tuple[Any]):
             master_track().mixer_device.volume.value = float(params[0])
+
+        def get_volume_db(_params: Tuple[Any]):
+            """Reply: (display, raw), e.g. ("-6.0 dB", 0.7)."""
+            volume = master_track().mixer_device.volume
+            return (str(volume.str_for_value(volume.value)), float(volume.value))
+
+        def get_volume_for_db(params: Tuple[Any]):
+            """Params: db. Reply: (raw, display_at_raw, status). Changes nothing."""
+            if len(params) < 1:
+                return ("error", "missing_args")
+            volume = master_track().mixer_device.volume
+            raw, reached = find_value_for_db(
+                lambda value: volume.str_for_value(value),
+                float(volume.min),
+                float(volume.max),
+                float(params[0]),
+            )
+            return (float(raw), str(volume.str_for_value(raw)), "ok" if reached else "out_of_range")
 
         def get_meter_level(_params: Tuple[Any]):
             return (master_track().output_meter_level,)
@@ -70,6 +89,8 @@ class MasterHandler(AbletonOSCHandler):
 
         self.osc_server.add_handler("/live/master/get/volume", get_volume)
         self.osc_server.add_handler("/live/master/set/volume", set_volume)
+        self.osc_server.add_handler("/live/master/get/volume_db", get_volume_db)
+        self.osc_server.add_handler("/live/master/get/volume_for_db", get_volume_for_db)
         self.osc_server.add_handler("/live/master/get/output_meter_level", get_meter_level)
         self.osc_server.add_handler("/live/master/get/output_meter_left", get_meter_left)
         self.osc_server.add_handler("/live/master/get/output_meter_right", get_meter_right)

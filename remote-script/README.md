@@ -30,6 +30,11 @@ Developed and smoke-tested against **Ableton Live 11.0.12** (API label `11.0`). 
 | `/live/clip/envelope/clear` | `track`, `clip`, `device_index`, `param_index` | Clear one envelope |
 | `/live/clip/envelope/clear_all` | `track`, `clip` | Clear all envelopes on the clip |
 | `/live/song/get/return_tracks` | — | `(count, *names)` for return tracks (send indices) |
+| `/live/track/get/volume_db` | `track_index` | Track volume as Live displays it: `(track, "-6.0 dB", raw)` |
+| `/live/track/get/volume_for_db` | `track_index`, `db` | Raw fader value for a dB target (binary search over `str_for_value`; changes nothing): `(track, raw, display_at_raw, "ok"\|"out_of_range")` |
+| `/live/track/get/send_db` / `send_for_db` | `track_index`, `send_index` [, `db`] | The same two for a send |
+| `/live/song/get/track_volumes_db` | — | `(count, display0, raw0, …)` for every track in one reply |
+| `/live/master/get/volume_db` / `volume_for_db` | — / `db` | The same two for the master volume |
 | `/live/device/get/available_input_routing_types` | `track_index`, `device_index` | Sidechain sources (Compressor on Live 11+) |
 | `/live/device/get/available_input_routing_channels` | `track_index`, `device_index` | Sidechain channels for the current source |
 | `/live/device/get/input_routing_type` | `track_index`, `device_index` | Current sidechain source |

@@ -6,6 +6,45 @@ from typing import Any, Optional, Tuple
 from .handler import AbletonOSCHandler
 
 
+_DB_NUMBER = re.compile(r"-?\d+(?:\.\d+)?")
+
+
+def parse_db_display(text):
+    """Turn a mixer display string into dB: '-6.0 dB' -> -6.0, '-inf dB' -> None."""
+    lowered = str(text).strip().lower()
+    if lowered.startswith("-inf"):
+        return None
+    match = _DB_NUMBER.search(lowered)
+    if match is None or "db" not in lowered:
+        raise ValueError("not a dB display string: %r" % (text,))
+    return float(match.group())
+
+
+def find_value_for_db(display_of, lo, hi, target_db, tolerance=0.051, max_steps=24):
+    """Binary-search the raw parameter value whose display reads target_db.
+
+    Live publishes no formula for its fader law, but str_for_value is monotonic,
+    so the display string is the ground truth. Nothing is changed in Live.
+    Returns (raw, reached); reached is False when the parameter cannot show
+    target_db (e.g. +10 dB on a fader that tops out at +6 dB).
+    """
+    if target_db <= -70.0:
+        return lo, True
+    best = hi
+    for _ in range(max_steps):
+        mid = (lo + hi) / 2.0
+        shown = parse_db_display(display_of(mid))
+        best = mid
+        if shown is not None and abs(shown - target_db) <= tolerance:
+            return best, True
+        if shown is None or shown < target_db:
+            lo = mid
+        else:
+            hi = mid
+    shown = parse_db_display(display_of(best))
+    return best, shown is not None and abs(shown - target_db) <= tolerance
+
+
 def _browser_roots(browser):
     roots = []
     for attr in (
@@ -1011,6 +1050,90 @@ class BrowserHandler(AbletonOSCHandler):
                     return (track_index, device_index, "set", channel_name)
             options = [str(c.display_name) for c in device.available_input_routing_channels]
             return (track_index, device_index, "not_found", channel_name) + tuple(options)
+
+        #----------------------------------------------------------------------
+        # Mixer levels in dB. Read a level the way Live displays it, or resolve
+        # the raw value for a dB target. Nothing here changes a level: setting
+        # stays with the stock raw setters (/live/track/set/volume, .../send).
+        #----------------------------------------------------------------------
+        def _level_reply(parameter):
+            return (str(parameter.str_for_value(parameter.value)), float(parameter.value))
+
+        def _raw_for_db_reply(parameter, target_db):
+            raw, reached = find_value_for_db(
+                lambda value: parameter.str_for_value(value),
+                float(parameter.min),
+                float(parameter.max),
+                float(target_db),
+            )
+            return (float(raw), str(parameter.str_for_value(raw)), "ok" if reached else "out_of_range")
+
+        def _track_or_none(track_index):
+            if track_index < 0 or track_index >= len(self.song.tracks):
+                return None
+            return self.song.tracks[track_index]
+
+        def track_get_volume_db_handler(params: Tuple[Any]):
+            """Params: track_index. Reply: (track_index, display, raw)."""
+            if len(params) < 1:
+                return ("error", "missing_args")
+            track_index = int(params[0])
+            track = _track_or_none(track_index)
+            if track is None:
+                return (track_index, "invalid_track_index")
+            return (track_index,) + _level_reply(track.mixer_device.volume)
+
+        def track_get_volume_for_db_handler(params: Tuple[Any]):
+            """Params: track_index, db. Reply: (track_index, raw, display_at_raw, status)."""
+            if len(params) < 2:
+                return ("error", "missing_args")
+            track_index = int(params[0])
+            track = _track_or_none(track_index)
+            if track is None:
+                return (track_index, "invalid_track_index")
+            return (track_index,) + _raw_for_db_reply(track.mixer_device.volume, params[1])
+
+        def _send_or_status(track_index, send_index):
+            track = _track_or_none(track_index)
+            if track is None:
+                return None, "invalid_track_index"
+            sends = track.mixer_device.sends
+            if send_index < 0 or send_index >= len(sends):
+                return None, "invalid_send_index"
+            return sends[send_index], None
+
+        def track_get_send_db_handler(params: Tuple[Any]):
+            """Params: track_index, send_index. Reply: (track_index, send_index, display, raw)."""
+            if len(params) < 2:
+                return ("error", "missing_args")
+            track_index, send_index = int(params[0]), int(params[1])
+            send, status = _send_or_status(track_index, send_index)
+            if send is None:
+                return (track_index, send_index, status)
+            return (track_index, send_index) + _level_reply(send)
+
+        def track_get_send_for_db_handler(params: Tuple[Any]):
+            """Params: track_index, send_index, db. Reply: (track_index, send_index, raw, display_at_raw, status)."""
+            if len(params) < 3:
+                return ("error", "missing_args")
+            track_index, send_index = int(params[0]), int(params[1])
+            send, status = _send_or_status(track_index, send_index)
+            if send is None:
+                return (track_index, send_index, status)
+            return (track_index, send_index) + _raw_for_db_reply(send, params[2])
+
+        def song_get_track_volumes_db_handler(_params: Tuple[Any]):
+            """Reply: (count, display0, raw0, display1, raw1, ...) in track order."""
+            reply = [len(self.song.tracks)]
+            for track in self.song.tracks:
+                reply.extend(_level_reply(track.mixer_device.volume))
+            return tuple(reply)
+
+        self.osc_server.add_handler("/live/track/get/volume_db", track_get_volume_db_handler)
+        self.osc_server.add_handler("/live/track/get/volume_for_db", track_get_volume_for_db_handler)
+        self.osc_server.add_handler("/live/track/get/send_db", track_get_send_db_handler)
+        self.osc_server.add_handler("/live/track/get/send_for_db", track_get_send_for_db_handler)
+        self.osc_server.add_handler("/live/song/get/track_volumes_db", song_get_track_volumes_db_handler)
 
         self.osc_server.add_handler("/live/song/get/return_tracks", song_get_return_tracks_handler)
         self.osc_server.add_handler(
