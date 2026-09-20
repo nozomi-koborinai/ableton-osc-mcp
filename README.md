@@ -50,6 +50,7 @@ This repo ships a small Remote Script patch under [`remote-script/`](remote-scri
 - `/live/song/get/return_tracks` (list return tracks for send indices)
 - `/live/device/get|set/input_routing_type|channel` (+ available lists) for Compressor sidechain
 - `/live/clip/envelope/get|set_steps|clear|clear_all` (+ `/live/clip/get/has_envelopes`) for Session clip automation
+- `/live/track/get/volume_db` · `volume_for_db` · `send_db` · `send_for_db`, `/live/song/get/track_volumes_db`, `/live/master/get/volume_db` · `volume_for_db` (mixer levels as Live displays them in dB, and the raw value for a dB target)
 
 Install steps: see [remote-script/README.md](remote-script/README.md).
 After applying the patch, **restart Ableton Live** (a full restart is required the first time; `/live/api/reload` alone is not enough).
@@ -272,7 +273,7 @@ Keep the lower-level tools for special cases:
 |---|---|
 | Create B without auditioning yet | `ableton_create_scene_energy_variation` |
 | Audition clips/scenes that already exist | `ableton_audition_ab` |
-| Mix balance A/B (volume deltas + restore) | `ableton_apply_mix_variation` → listen → record preference → `ableton_restore_mix_snapshot` |
+| Mix balance A/B (volume deltas in dB + restore) | `ableton_apply_mix_variation` → listen → record preference → `ableton_restore_mix_snapshot` |
 
 Mix is intentionally outside `ableton_compare_ab_variation` because it uses snapshots, not clip/scene slots.
 
@@ -371,7 +372,7 @@ sharing a position, so a block-chord sketch is a few lines of text.
 | `ableton_arm_track` | Arm/disarm for recording |
 | `ableton_get_track_input_routing` / `ableton_set_track_input_routing` | Input routing (e.g. Resampling) |
 | `ableton_set_monitoring` | Monitoring state (0=In 1=Auto 2=Off) |
-| `ableton_set_track_volume` | Set track volume |
+| `ableton_set_track_volume` | Set track volume as dB (`db`), a change in dB (`delta_db`), or a raw position; returns the level Live displays (dB needs the patch) |
 | `ableton_clip_read` / `ableton_clip_write` | Read and replace a MIDI clip's notes as clip notation |
 | `ableton_match_clip_tempo` | Enable Warp on an audio clip so it follows the project tempo (`beats` or `complex`) |
 | `ableton_analyze_local_audio` | Analyze a local `.wav`/`.aif` (BPM/key alternatives, density, rms_per_beat, band_balance, match_axes, sections, onset grid, texture, mix_profile). Optional window, `references` to compare against saved profiles, `save_reference_as` to keep the numbers. Rejects URLs; no melody/note extraction |
@@ -416,7 +417,7 @@ sharing a position, so a block-chord sketch is a few lines of text.
 | `ableton_duplicate_track_for_processing` | Duplicate a track into a dry/wet pair (original stays dry, copy becomes processed) |
 | `ableton_get_return_tracks` | List return tracks (A/B/…) with send indices (requires browser patch) |
 | `ableton_create_return_track` | Create a new return track |
-| `ableton_get_track_sends` / `ableton_set_track_send` | Get/set send amounts to returns (~0..1; ~0.85 ≈ 0 dB) |
+| `ableton_get_track_sends` / `ableton_set_track_send` | Get/set send amounts to returns, raw or in dB (`db`, `delta_db`) |
 | `ableton_get_device_sidechain` / `ableton_set_device_sidechain` | Compressor sidechain input routing (Live 11+; requires browser patch) |
 | `ableton_find_browser_item` | Search Live Browser (requires patch) |
 | `ableton_list_browser_folder` | List Browser roots or folder children (requires patch) |
@@ -430,7 +431,7 @@ sharing a position, so a block-chord sketch is a few lines of text.
 | `ableton_autogain_tracks` | Iteratively adjust track volumes toward a target meter level |
 | `ableton_apply_mix_variation` | Mix A/B entry: apply small B volume changes and return the A snapshot |
 | `ableton_capture_mix_snapshot` / `ableton_restore_mix_snapshot` | Capture or restore track volumes for mix A/B |
-| `ableton_get_master_meter` / `ableton_get_master_volume` / `ableton_set_master_volume` | Master meter/volume (requires master patch) |
+| `ableton_get_master_meter` / `ableton_get_master_volume` / `ableton_set_master_volume` | Master meter/volume, raw or in dB (requires master patch) |
 | `ableton_get_master_devices` / `ableton_get_master_device_parameters` / `ableton_set_master_device_parameter` | Master devices (requires master patch) |
 | `ableton_load_on_master` | Load Browser item onto master (requires browser+master patch) |
 | `ableton_get_session_record` / `ableton_set_session_record` | Session Record on/off |
@@ -448,7 +449,8 @@ Once configured, you can ask your AI assistant:
 - "Compare a drum groove variation of clip 0 into empty slot 1, then ask which I prefer"
 - "Check my taste profile and run the least-tried bass comparison next"
 - "I prefer the variation; save that and suggest what to compare next"
-- "Create a mix B with the bass 0.05 lower, let me listen, then restore A"
+- "Create a mix B with the bass 1.5 dB lower, let me listen, then restore A"
+- "Turn the 808 down 2 dB and set the pad to -24 dB"
 - "Humanize the drum clip with a bit of swing"
 - "Warp that audio sample to the project tempo"
 - "Analyze this local wav and tell me its BPM and how many bars it is at 128"
