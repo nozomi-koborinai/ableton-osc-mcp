@@ -123,20 +123,20 @@ func createDrumCompare(client compareABClient, input CompareABVariationInput, va
 	}
 	track := created.TrackIndex
 	return CompareABVariationOutput{
-			Kind:           "drum",
-			Variation:      created.Variation,
-			TrackIndex:     &track,
-			SourceIndex:    created.SourceClipIndex,
-			VariationIndex: created.TargetClipIndex,
-			NotesChanged:   created.NotesChanged,
-			NotesAdded:     created.NotesAdded,
-			Seed:           created.Seed,
-		}, AuditionABInput{
-			TargetType:     "clip",
-			TrackIndex:     &track,
-			SourceIndex:    created.SourceClipIndex,
-			VariationIndex: created.TargetClipIndex,
-		}, nil
+		Kind:           "drum",
+		Variation:      created.Variation,
+		TrackIndex:     &track,
+		SourceIndex:    created.SourceClipIndex,
+		VariationIndex: created.TargetClipIndex,
+		NotesChanged:   created.NotesChanged,
+		NotesAdded:     created.NotesAdded,
+		Seed:           created.Seed,
+	}, AuditionABInput{
+		TargetType:     "clip",
+		TrackIndex:     &track,
+		SourceIndex:    created.SourceClipIndex,
+		VariationIndex: created.TargetClipIndex,
+	}, nil
 }
 
 func createBassCompare(client compareABClient, input CompareABVariationInput, variation string) (CompareABVariationOutput, AuditionABInput, error) {
@@ -161,20 +161,20 @@ func createBassCompare(client compareABClient, input CompareABVariationInput, va
 	}
 	track := created.TrackIndex
 	return CompareABVariationOutput{
-			Kind:           "bass",
-			Variation:      created.Variation,
-			TrackIndex:     &track,
-			SourceIndex:    created.SourceClipIndex,
-			VariationIndex: created.TargetClipIndex,
-			NotesChanged:   created.NotesChanged,
-			NotesSkipped:   created.NotesSkipped,
-			Seed:           created.Seed,
-		}, AuditionABInput{
-			TargetType:     "clip",
-			TrackIndex:     &track,
-			SourceIndex:    created.SourceClipIndex,
-			VariationIndex: created.TargetClipIndex,
-		}, nil
+		Kind:           "bass",
+		Variation:      created.Variation,
+		TrackIndex:     &track,
+		SourceIndex:    created.SourceClipIndex,
+		VariationIndex: created.TargetClipIndex,
+		NotesChanged:   created.NotesChanged,
+		NotesSkipped:   created.NotesSkipped,
+		Seed:           created.Seed,
+	}, AuditionABInput{
+		TargetType:     "clip",
+		TrackIndex:     &track,
+		SourceIndex:    created.SourceClipIndex,
+		VariationIndex: created.TargetClipIndex,
+	}, nil
 }
 
 func createSceneCompare(client compareABClient, input CompareABVariationInput, variation string) (CompareABVariationOutput, AuditionABInput, error) {
@@ -198,17 +198,17 @@ func createSceneCompare(client compareABClient, input CompareABVariationInput, v
 		return CompareABVariationOutput{}, AuditionABInput{}, err
 	}
 	return CompareABVariationOutput{
-			Kind:           "scene",
-			Variation:      created.Variation,
-			SourceIndex:    created.SourceSceneIndex,
-			VariationIndex: created.TargetSceneIndex,
-			NotesChanged:   created.NotesChanged,
-			TracksChanged:  created.TracksChanged,
-		}, AuditionABInput{
-			TargetType:     "scene",
-			SourceIndex:    created.SourceSceneIndex,
-			VariationIndex: created.TargetSceneIndex,
-		}, nil
+		Kind:           "scene",
+		Variation:      created.Variation,
+		SourceIndex:    created.SourceSceneIndex,
+		VariationIndex: created.TargetSceneIndex,
+		NotesChanged:   created.NotesChanged,
+		TracksChanged:  created.TracksChanged,
+	}, AuditionABInput{
+		TargetType:     "scene",
+		SourceIndex:    created.SourceSceneIndex,
+		VariationIndex: created.TargetSceneIndex,
+	}, nil
 }
 
 func requireClipCompareSlots(input CompareABVariationInput) (trackIndex, sourceClip, targetClip int, err error) {
