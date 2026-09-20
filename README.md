@@ -208,7 +208,7 @@ Download from [GitHub Releases](https://github.com/nozomi-koborinai/ableton-osc-
 
 #### Option C: Build from source
 
-Requires Go 1.25+:
+Requires Go 1.27+:
 
 ```bash
 git clone https://github.com/nozomi-koborinai/ableton-osc-mcp.git

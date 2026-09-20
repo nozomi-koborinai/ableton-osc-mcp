@@ -1,6 +1,6 @@
 module github.com/nozomi-koborinai/ableton-osc-mcp
 
-go 1.25.12
+go 1.27.1
 
 require (
 	github.com/firebase/genkit/go v1.10.0
