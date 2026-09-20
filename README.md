@@ -26,6 +26,7 @@ This enables AI assistants (Claude, Cursor, etc.) to interact with Ableton Live 
 - Match an audio clip to the project tempo with Warp (e.g. after loading a sample)
 - Analyze a local `.wav`/`.aif`, or reference-analyze an `http(s)`/YouTube URL, for duration, levels, BPM/key alternatives, chords, section map, rhythm density, rms_per_beat, band balance, match axes, texture, and a mix profile (integrated LUFS, true peak, crest, 9-band spectrum, per-band stereo width) (URL streams in memory and is never saved; no melody extraction)
 - Save a track's mix profile as a named reference (numbers only, never audio) and compare your own bounce against a weighted blend of references
+- Measure what Live is putting out — LUFS, true peak, crest, 9 bands, stereo width — from a Resampling pass, against saved references and per track group (`ableton_measure_mix`); no export dialog, no screen automation
 - Autogain tracks toward a target meter level while audio is playing
 - Diagnose AbletonOSC connection and browser/master patch readiness
 - Fire clip slots and send raw OSC for advanced control
@@ -435,7 +436,8 @@ sharing a position, so a block-chord sketch is a few lines of text.
 | `ableton_get_master_devices` / `ableton_get_master_device_parameters` / `ableton_set_master_device_parameter` | Master devices (requires master patch) |
 | `ableton_load_on_master` | Load Browser item onto master (requires browser+master patch) |
 | `ableton_get_session_record` / `ableton_set_session_record` | Session Record on/off |
-| `ableton_bounce_session_pass` | Record a scene pass onto a Bounce track via Resampling (tens of seconds; does not export WAV) |
+| `ableton_bounce_session_pass` | Record a scene pass onto a Bounce track via Resampling and return the audio file Live wrote (real time; not a rendered export) |
+| `ableton_measure_mix` | Record N bars of Live's output and measure them (LUFS, true peak, crest, 9 bands, width), optionally against saved reference profiles and per track group; deletes its own clip afterwards (real time) |
 | `ableton_setup_drum_track` | Create MIDI drum track, load kit, fill clip with preset pattern (requires browser patch) |
 | `ableton_osc_send` | Send raw OSC message |
 
@@ -456,6 +458,7 @@ Once configured, you can ask your AI assistant:
 - "Analyze this local wav and tell me its BPM and how many bars it is at 128"
 - "Analyze this YouTube track from 0:20 to 1:30 and keep it as the reference 'envy'"
 - "Compare my bounce at ~/Music/mix_v3.aif with references envy (0.6) and crayon (0.4)"
+- "Measure 8 bars of the hook scene against references envy (0.6) and crayon (0.4), with drums, 808 and tops as groups"
 - "Autogain the drum and bass tracks while the beat is playing"
 - "Search my local Splice library for a punchy kick and load one onto an audio track"
 - "Find drum kits named Street in the browser"
