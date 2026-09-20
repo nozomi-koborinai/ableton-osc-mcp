@@ -17,12 +17,13 @@ const (
 
 // Config holds the application configuration.
 type Config struct {
-	AbletonHost       string
-	AbletonPort       int
-	AbletonClientPort int
-	Timeout           time.Duration
-	TasteProfilePath  string
-	SplicePath        string // optional; empty means auto-detect common Splice folders
+	AbletonHost           string
+	AbletonPort           int
+	AbletonClientPort     int
+	Timeout               time.Duration
+	TasteProfilePath      string
+	ReferenceProfilesPath string
+	SplicePath            string // optional; empty means auto-detect common Splice folders
 }
 
 // Load reads configuration from environment variables with defaults.
@@ -32,12 +33,13 @@ func Load() Config {
 		host = defaultAbletonHost
 	}
 	return Config{
-		AbletonHost:       host,
-		AbletonPort:       envInt("ABLETON_OSC_PORT", defaultAbletonPort),
-		AbletonClientPort: envInt("ABLETON_OSC_CLIENT_PORT", defaultAbletonClientPort),
-		Timeout:           envDurationMs("ABLETON_OSC_TIMEOUT_MS", defaultTimeoutMs),
-		TasteProfilePath:  envString("ABLETON_OSC_TASTE_PROFILE_PATH", defaultTasteProfilePath()),
-		SplicePath:        strings.TrimSpace(os.Getenv("ABLETON_OSC_SPLICE_PATH")),
+		AbletonHost:           host,
+		AbletonPort:           envInt("ABLETON_OSC_PORT", defaultAbletonPort),
+		AbletonClientPort:     envInt("ABLETON_OSC_CLIENT_PORT", defaultAbletonClientPort),
+		Timeout:               envDurationMs("ABLETON_OSC_TIMEOUT_MS", defaultTimeoutMs),
+		TasteProfilePath:      envString("ABLETON_OSC_TASTE_PROFILE_PATH", defaultTasteProfilePath()),
+		ReferenceProfilesPath: envString("ABLETON_OSC_REFERENCE_PROFILES_PATH", defaultReferenceProfilesPath()),
+		SplicePath:            strings.TrimSpace(os.Getenv("ABLETON_OSC_SPLICE_PATH")),
 	}
 }
 
@@ -47,6 +49,14 @@ func defaultTasteProfilePath() string {
 		dir = os.TempDir()
 	}
 	return filepath.Join(dir, "ableton-osc-mcp", "taste-profile.json")
+}
+
+func defaultReferenceProfilesPath() string {
+	dir, err := os.UserConfigDir()
+	if err != nil || dir == "" {
+		dir = os.TempDir()
+	}
+	return filepath.Join(dir, "ableton-osc-mcp", "reference-profiles.json")
 }
 
 func envString(key string, def string) string {

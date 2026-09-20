@@ -9,10 +9,11 @@ import (
 
 // Deps carries everything the tool constructors need.
 type Deps struct {
-	Client     *abletonosc.Client
-	TasteStore tasteStore
-	Diagnose   DiagnoseSettings
-	Splice     SpliceLibrarySettings
+	Client         *abletonosc.Client
+	TasteStore     tasteStore
+	ReferenceStore referenceStore
+	Diagnose       DiagnoseSettings
+	Splice         SpliceLibrarySettings
 }
 
 // Register defines every tool on g and returns them in a stable order.
@@ -73,8 +74,9 @@ func Register(g *genkit.Genkit, deps Deps) []ai.Tool {
 		NewAbletonSetClipEnvelopeSteps(g, c),
 		NewAbletonClearClipEnvelope(g, c),
 		NewAbletonMatchClipTempo(g, c),
-		NewAbletonAnalyzeLocalAudio(g),
-		NewAbletonAnalyzeAudioURL(g),
+		NewAbletonAnalyzeLocalAudio(g, deps.ReferenceStore),
+		NewAbletonAnalyzeAudioURL(g, deps.ReferenceStore),
+		NewAbletonListReferenceProfiles(g, deps.ReferenceStore),
 		NewAbletonChopDraft(g),
 		NewAbletonAuditionAB(g, c),
 

@@ -66,3 +66,24 @@ func TestAnnotationsForUnknownTool(t *testing.T) {
 		t.Error("unknown tool must be marked destructive")
 	}
 }
+
+// The analyze tools can write the reference profile file (save_reference_as),
+// so they may not claim to be read-only even though most calls only read.
+func TestAnalyzeToolsAreNotReadOnlyBecauseTheyCanSaveReferences(t *testing.T) {
+	for _, name := range []string{"ableton_analyze_local_audio", "ableton_analyze_audio_url"} {
+		got := annotationsFor(name)
+		if got.ReadOnlyHint == nil || *got.ReadOnlyHint {
+			t.Errorf("%s must not be readOnly: save_reference_as writes to disk", name)
+		}
+		if got.DestructiveHint == nil || *got.DestructiveHint {
+			t.Errorf("%s should not be destructive", name)
+		}
+		if got.IdempotentHint == nil || !*got.IdempotentHint {
+			t.Errorf("%s should be idempotent: saving the same profile twice leaves one profile", name)
+		}
+	}
+	got := annotationsFor("ableton_list_reference_profiles")
+	if got.ReadOnlyHint == nil || !*got.ReadOnlyHint {
+		t.Error("ableton_list_reference_profiles should be readOnly")
+	}
+}

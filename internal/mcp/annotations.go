@@ -35,10 +35,12 @@ func annotationsFor(name string) mcp.ToolAnnotation {
 // destructive  - removes or replaces something that already exists
 // idempotent   - repeating the same call leaves the same state
 var toolHints = map[string]hints{
-	"ableton_clip_read":                      {readOnly: true},
-	"ableton_clip_write":                     {destructive: true, idempotent: true},
-	"ableton_analyze_audio_url":              {readOnly: true},
-	"ableton_analyze_local_audio":            {readOnly: true},
+	"ableton_clip_read":  {readOnly: true},
+	"ableton_clip_write": {destructive: true, idempotent: true},
+	// The analyze tools read audio, but save_reference_as writes the reference
+	// profile file, so they cannot claim readOnly for the calls that only read.
+	"ableton_analyze_audio_url":              {idempotent: true},
+	"ableton_analyze_local_audio":            {idempotent: true},
 	"ableton_apply_device_intent":            {idempotent: true},
 	"ableton_apply_mix_variation":            {idempotent: true},
 	"ableton_arm_track":                      {idempotent: true},
@@ -91,6 +93,7 @@ var toolHints = map[string]hints{
 	"ableton_get_track_sends":                {readOnly: true},
 	"ableton_list_browser_folder":            {readOnly: true},
 	"ableton_list_intents":                   {readOnly: true},
+	"ableton_list_reference_profiles":        {readOnly: true},
 	"ableton_list_slice_presets":             {readOnly: true},
 	"ableton_load_browser_item":              {},
 	"ableton_load_browser_path":              {},

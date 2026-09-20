@@ -10,6 +10,7 @@ import (
 	"github.com/nozomi-koborinai/ableton-osc-mcp/internal/abletonosc"
 	"github.com/nozomi-koborinai/ableton-osc-mcp/internal/config"
 	mcpinternal "github.com/nozomi-koborinai/ableton-osc-mcp/internal/mcp"
+	"github.com/nozomi-koborinai/ableton-osc-mcp/internal/reference"
 	"github.com/nozomi-koborinai/ableton-osc-mcp/internal/taste"
 	"github.com/nozomi-koborinai/ableton-osc-mcp/internal/tools"
 )
@@ -45,9 +46,15 @@ func main() {
 		log.Fatal(err)
 	}
 
+	referenceStore, err := reference.NewStore(cfg.ReferenceProfilesPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	toolList := tools.Register(g, tools.Deps{
-		Client:     ableton,
-		TasteStore: tasteStore,
+		Client:         ableton,
+		TasteStore:     tasteStore,
+		ReferenceStore: referenceStore,
 		Diagnose: tools.DiagnoseSettings{
 			Host:       cfg.AbletonHost,
 			Port:       cfg.AbletonPort,

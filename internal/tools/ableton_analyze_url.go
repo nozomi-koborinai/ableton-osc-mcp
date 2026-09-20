@@ -8,8 +8,11 @@ import (
 )
 
 type AnalyzeAudioURLInput struct {
-	URL          string   `json:"url" jsonschema:"description=http(s) URL to reference (e.g. YouTube). Streamed briefly for analysis and never saved."`
-	ProjectTempo *float64 `json:"project_tempo,omitempty" jsonschema:"description=Optional project BPM to estimate length in bars,minimum=20,maximum=400"`
+	URL             string   `json:"url" jsonschema:"description=http(s) URL to reference (e.g. YouTube). Streamed briefly for analysis and never saved."`
+	ProjectTempo    *float64 `json:"project_tempo,omitempty" jsonschema:"description=Optional project BPM to estimate length in bars,minimum=20,maximum=400"`
+	StartSec        *float64 `json:"start_sec,omitempty" jsonschema:"description=Optional window start in seconds (e.g. to skip a long intro); everything reported then describes the window,minimum=0"`
+	EndSec          *float64 `json:"end_sec,omitempty" jsonschema:"description=Optional window end in seconds\\, at least 1 s after start_sec,minimum=0"`
+	SaveReferenceAs string   `json:"save_reference_as,omitempty" jsonschema:"description=Keep this track's numbers (never audio) as a reference profile under this name; 1-40 characters from a-z\\, 0-9\\, '-' and '_'. Writes to disk"`
 }
 
 type AnalyzeAudioURLOutput struct {
@@ -39,22 +42,31 @@ type AnalyzeAudioURLOutput struct {
 	BrightnessHz      float64                        `json:"brightness_hz,omitempty"`
 	CrestFactorDB     float64                        `json:"crest_factor_db,omitempty"`
 	StereoWidth       float64                        `json:"stereo_width"`
+	RangeStartSec     float64                        `json:"range_start_sec,omitempty"`
+	RangeEndSec       float64                        `json:"range_end_sec,omitempty"`
+	MixProfile        *audioanalyze.MixProfile       `json:"mix_profile,omitempty"`
+	SavedReference    string                         `json:"saved_reference,omitempty"`
 	LengthBarsAtBPM   float64                        `json:"length_bars_at_project_tempo,omitempty"`
 	Note              string                         `json:"note"`
 	NextStep          string                         `json:"next_step"`
 }
 
-func NewAbletonAnalyzeAudioURL(g *genkit.Genkit) ai.Tool {
+func NewAbletonAnalyzeAudioURL(g *genkit.Genkit, store referenceStore) ai.Tool {
 	return genkit.DefineTool(g, "ableton_analyze_audio_url",
-		"Reference-analyze audio at an http(s) URL (e.g. YouTube) for tempo (+ half/double alternatives), key/scale (+ alternative), chords, section map, rhythm_density, rms_per_beat, band_balance, match_axes (density/low-end/space), and texture. Streams via yt-dlp+ffmpeg in memory, saves nothing, never extracts melodies/notes. Requires yt-dlp and ffmpeg on PATH; you are responsible for your right to access the URL.",
+		"Reference-analyze audio at an http(s) URL (e.g. YouTube) for tempo (+ half/double alternatives), key/scale (+ alternative), chords, section map, rhythm_density, rms_per_beat, band_balance, match_axes, texture, and mix_profile (integrated LUFS, true peak, crest, 9-band spectrum in dB, per-band stereo width). Streams via yt-dlp+ffmpeg in memory and never saves audio or extracts melodies/notes. `save_reference_as` writes the numbers to the reference profile file on disk — set it only when the person asked to keep this track as a reference. Requires yt-dlp and ffmpeg on PATH; you are responsible for your right to access the URL.",
 		func(tc *ai.ToolContext, input AnalyzeAudioURLInput) (AnalyzeAudioURLOutput, error) {
-			projectTempo := 0.0
-			if input.ProjectTempo != nil {
-				projectTempo = *input.ProjectTempo
-			}
-			got, err := audioanalyze.AnalyzeURL(tc, input.URL, audioanalyze.Options{ProjectTempo: projectTempo})
+			saveAs, err := checkReferenceName(store, input.SaveReferenceAs)
 			if err != nil {
 				return AnalyzeAudioURLOutput{}, err
+			}
+			got, err := audioanalyze.AnalyzeURL(tc, input.URL, analysisOptions(input.ProjectTempo, input.StartSec, input.EndSec))
+			if err != nil {
+				return AnalyzeAudioURLOutput{}, err
+			}
+			if saveAs != "" {
+				if err := saveReference(store, saveAs, "url", got.Path, got); err != nil {
+					return AnalyzeAudioURLOutput{}, err
+				}
 			}
 			return AnalyzeAudioURLOutput{
 				Source:            got.Path,
@@ -83,6 +95,10 @@ func NewAbletonAnalyzeAudioURL(g *genkit.Genkit) ai.Tool {
 				BrightnessHz:      got.BrightnessHz,
 				CrestFactorDB:     got.CrestFactorDB,
 				StereoWidth:       got.StereoWidth,
+				RangeStartSec:     got.RangeStartSec,
+				RangeEndSec:       got.RangeEndSec,
+				MixProfile:        got.MixProfile,
+				SavedReference:    saveAs,
 				LengthBarsAtBPM:   got.LengthBarsAtBPM,
 				Note:              got.Note,
 				NextStep:          "Use match_axes + band_balance + section map as arrangement cues; build your own part from tempo/key/chords. This tool does not import audio — place only samples you have rights to use.",
