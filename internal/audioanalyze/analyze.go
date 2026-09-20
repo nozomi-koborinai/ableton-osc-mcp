@@ -61,7 +61,7 @@ type Result struct {
 	Note              string            `json:"note"`
 }
 
-// AnalyzeFile analyzes a local WAV file already present on disk. It never
+// AnalyzeFile analyzes a local WAV or AIFF file already present on disk. It never
 // downloads or writes audio; callers must supply audio they have rights to use.
 func AnalyzeFile(path string, projectTempo float64) (Result, error) {
 	abs, err := validateLocalAudioPath(path)
@@ -101,7 +101,7 @@ func AnalyzeFile(path string, projectTempo float64) (Result, error) {
 // analyzeWAVStream decodes WAV audio from r and computes sampling-oriented
 // metadata. Path and Note are left for the caller to fill in per source.
 func analyzeWAVStream(r io.Reader, projectTempo float64) (Result, error) {
-	audio, err := loadWAV(io.LimitReader(r, maxFileBytes+1))
+	audio, format, err := loadAudio(io.LimitReader(r, maxFileBytes+1))
 	if err != nil {
 		return Result{}, err
 	}
@@ -127,7 +127,7 @@ func analyzeWAVStream(r io.Reader, projectTempo float64) (Result, error) {
 	}
 
 	out := Result{
-		Format:            "wav",
+		Format:            format,
 		DurationSec:       duration,
 		SampleRate:        sampleRate,
 		Channels:          channels,
@@ -203,9 +203,10 @@ func validateLocalAudioPath(path string) (string, error) {
 	if !filepath.IsAbs(path) {
 		return "", errors.New("path must be absolute")
 	}
-	ext := strings.ToLower(filepath.Ext(path))
-	if ext != ".wav" {
-		return "", errors.New("only local .wav files are supported in this version")
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".wav", ".aif", ".aiff":
+	default:
+		return "", errors.New("only local .wav, .aif, or .aiff files are supported")
 	}
 	return filepath.Clean(path), nil
 }
@@ -328,16 +329,22 @@ func downmix(chans [][]float64) []float64 {
 // decodeChannels splits interleaved PCM/float WAV data into per-channel float64
 // samples in [-1, 1].
 func decodeChannels(data []byte, channels, bitsPerSample int, audioFormat uint16) ([][]float64, error) {
-	if channels < 1 {
-		return nil, errors.New("invalid channel count")
-	}
 	bytesPerSample, decode, err := sampleDecoder(bitsPerSample, audioFormat)
 	if err != nil {
 		return nil, err
 	}
+	return deinterleave(data, channels, bytesPerSample, decode)
+}
+
+// deinterleave splits interleaved sample bytes into per-channel float64
+// samples using decode for one sample.
+func deinterleave(data []byte, channels, bytesPerSample int, decode func([]byte) float64) ([][]float64, error) {
+	if channels < 1 {
+		return nil, errors.New("invalid channel count")
+	}
 	frame := bytesPerSample * channels
 	if len(data) < frame {
-		return nil, errors.New("wav data too short")
+		return nil, errors.New("audio data too short")
 	}
 	n := len(data) / frame
 	out := make([][]float64, channels)
