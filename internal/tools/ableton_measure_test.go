@@ -194,6 +194,32 @@ func TestMeasureMixWarnsWhenTheMasterIsSquashed(t *testing.T) {
 	}
 }
 
+func TestMeasureMixRefusesAWindowTooShortToAnalyzeBeforeRecording(t *testing.T) {
+	t.Parallel()
+
+	// At 300 BPM a 4/4 bar lasts 0.8 s, and the analysis needs a full second.
+	// Finding that out after a real-time pass would waste the pass.
+	live := newFakeRecorder()
+	live.tempo = 300
+	script := &scriptedMeasureDeps{mixes: []audioanalyze.MixProfile{testMix(-10, 9, -6)}}
+	_, err := measureMixTool(live, script.deps(live, nil), MeasureMixInput{Bars: 1})
+	var actionableErr *ActionableError
+	if !errors.As(err, &actionableErr) || actionableErr.Code != "window_too_short" {
+		t.Fatalf("error = %v, want window_too_short", err)
+	}
+	if !strings.Contains(actionableErr.NextStep, "2 bars") {
+		t.Errorf("next step = %q, want it to say how many bars are enough (2)", actionableErr.NextStep)
+	}
+	if len(live.calls) != 0 || len(script.windows) != 0 {
+		t.Errorf("Live was touched (%v) or audio analyzed (%d) for a pass that could never be measured", live.addresses(), len(script.windows))
+	}
+
+	// Two bars are 1.6 s: fine.
+	if _, err := measureMixTool(live, script.deps(live, nil), MeasureMixInput{Bars: 2}); err != nil {
+		t.Errorf("two bars at 300 BPM: %v", err)
+	}
+}
+
 func TestMeasureMixValidatesItsInput(t *testing.T) {
 	t.Parallel()
 

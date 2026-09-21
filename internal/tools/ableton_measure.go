@@ -63,7 +63,7 @@ type measureDeps struct {
 
 func NewAbletonMeasureMix(g *genkit.Genkit, client *abletonosc.Client, store referenceStore) ai.Tool {
 	return genkit.DefineTool(g, "ableton_measure_mix",
-		"Ableton Live: record what Live is putting out (Resampling onto a muted 'Measure' audio track) and measure it — integrated LUFS, true peak, crest, 9-band spectrum, per-band stereo width — optionally against saved reference profiles and per track group. Runs in real time: `bars` bars (bar to bar, so up to one bar of waiting first), plus one more pass per group. It creates the Measure track if missing, leaves the audio files in the Live project's recordings folder, and deletes its own clips unless keep_recording is set. For the length of a pass it disarms any other armed track and selects an unused scene row (Session Record would otherwise record on those tracks too); both are put back afterwards. Use when the listener asks to measure the mix, or to check a mix change against the references; not for a level check of one track (ableton_get_track_meter). It reports differences and never moves a fader or an EQ.",
+		"Ableton Live: record what Live is putting out (Resampling onto a muted 'Measure' audio track) and measure it — integrated LUFS, true peak, crest, 9-band spectrum, per-band stereo width — optionally against saved reference profiles and per track group. Runs in real time: `bars` bars (bar to bar, so up to one bar of waiting first), plus one more pass per group. It creates the Measure track if missing, leaves the audio files in the Live project's recordings folder, and deletes its own clips unless keep_recording is set. For the length of a pass it disarms any other armed track, selects an unused scene row (adding an empty scene at the end if there is none) and removes the stop buttons on its own track's other rows (Session Record would otherwise record on those tracks too, and a launched scene would stop the take); arming, selection and stop buttons are put back afterwards. Use when the listener asks to measure the mix, or to check a mix change against the references; not for a level check of one track (ableton_get_track_meter). It reports differences and never moves a fader or an EQ.",
 		func(_ *ai.ToolContext, input MeasureMixInput) (MeasureMixOutput, error) {
 			return measureMixTool(client, measureDeps{
 				record: recordDeps{
@@ -113,6 +113,11 @@ func measureMixTool(c recordClient, deps measureDeps, input MeasureMixInput) (Me
 	if err != nil {
 		return MeasureMixOutput{}, err
 	}
+	// Nor should a window the analysis will refuse: at fast tempos, or in 2/4, a
+	// bar or two can be shorter than the second it needs.
+	if err := checkMeasureWindow(c, bars); err != nil {
+		return MeasureMixOutput{}, err
+	}
 
 	started := time.Now()
 	out := MeasureMixOutput{RecordedFiles: []string{}}
@@ -148,6 +153,28 @@ func measureMixTool(c recordClient, deps measureDeps, input MeasureMixInput) (Me
 	out.DurationSec = math.Round(time.Since(started).Seconds()*10) / 10
 	out.Note = measureNote(mix)
 	return out, nil
+}
+
+// checkMeasureWindow refuses, before anything is recorded, a number of bars that
+// is too short to analyze at the current tempo and time signature.
+func checkMeasureWindow(c recordClient, bars int) error {
+	tempo, err := queryAuditionTempo(c)
+	if err != nil {
+		return err
+	}
+	beatsPerBar, err := queryAuditionBeatsPerBar(c)
+	if err != nil {
+		return err
+	}
+	barSec := float64(beatsPerBar) * 60 / tempo
+	const margin = 0.05 // Live's file can come out a hair under the nominal length
+	if windowSec := float64(bars) * barSec; windowSec < audioanalyze.MinWindowSec+margin {
+		enough := int(math.Ceil((audioanalyze.MinWindowSec + margin) / barSec))
+		return actionable("window_too_short",
+			fmt.Sprintf("%d bar(s) last %.2f s at %.0f BPM with %d beats to the bar, and the analysis needs at least %.0f s", bars, windowSec, tempo, beatsPerBar, audioanalyze.MinWindowSec),
+			fmt.Sprintf("Measure at least %d bars.", enough))
+	}
+	return nil
 }
 
 // measureOnePass records one window, measures it, and deletes the clip again

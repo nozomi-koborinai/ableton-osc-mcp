@@ -29,6 +29,11 @@ type Onset struct {
 	Strength float64 `json:"strength"`
 }
 
+// MinWindowSec is the shortest stretch of audio worth analyzing. Callers that
+// decide the window themselves (a recording of N bars) should check against it
+// before doing the work.
+const MinWindowSec = 1.0
+
 // Options narrows and annotates one analysis run.
 type Options struct {
 	ProjectTempo float64 // project BPM for length_bars_at_project_tempo; 0 when unknown
@@ -56,7 +61,7 @@ func applyWindow(audio wavAudio, opts Options) (wavAudio, [2]float64, error) {
 	if end == 0 || end > total {
 		end = total
 	}
-	if end-opts.StartSec < 1 {
+	if end-opts.StartSec < MinWindowSec {
 		return wavAudio{}, [2]float64{}, errors.New("analysis window must be at least 1 second")
 	}
 	from := int(opts.StartSec * float64(audio.sampleRate))
