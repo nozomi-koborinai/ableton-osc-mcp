@@ -328,6 +328,15 @@ do about them is a decision for ears. References with vocals read high between
 Live on macOS records AIFF, so `.aif` files bounced inside Live are read
 directly (PCM 8/16/24/32-bit, `sowt`, and `fl32`).
 
+**Measuring inside Live.** `ableton_measure_mix` records Live's master output
+onto a muted `Measure` audio track (input: Resampling) and analyzes the file
+Live writes — no export dialog, no screen automation. Live records bar to bar,
+so the file is exactly the bars you asked for. While a pass runs, the tool
+disarms any other armed track and selects an unused scene row (Session Record
+would otherwise record on those tracks too, and launching a scene would stop the
+take); both are restored afterwards, and the recorded clip is deleted unless you
+ask to keep it. The audio files stay in the Live project's recordings folder.
+
 For production decisions (not melody extraction), both tools also return:
 - `bpm_alternatives` / `key_alternatives` — half/double tempo and second-best key when in range
 - `rhythm_density` — onsets per bar at the estimated tempo

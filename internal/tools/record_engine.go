@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"math"
 	"time"
+
+	"github.com/nozomi-koborinai/ableton-osc-mcp/internal/abletonosc"
 )
 
 const (
 	recordMaxBars        = 64
-	recordTailBeats      = 0.25 // record a touch past the window so its end is inside the file
-	recordFireLeadBeats  = 1.0  // fire the next scene this far ahead; 1-bar quantization lands it on the boundary
+	recordLeadSeconds    = 0.5 // act this long ahead of a bar line; 1-bar quantization lands it on the line
+	recordCheckBeats     = 0.5 // how far into the window to check that Live really is recording
 	recordFileSettleWait = 150 * time.Millisecond
 	recordFileSettleMax  = 20
 )
@@ -30,7 +32,7 @@ type recordSpan struct {
 type recordPlan struct {
 	TrackName       string
 	Spans           []recordSpan
-	StopClipsAtEnds bool // bounce: stop all clips before and after the pass
+	StopClipsAtEnds bool // bounce: Back to Arrangement and stop all clips before the pass, stop all clips after
 }
 
 // recordedTake describes what a pass produced and when, in song time.
@@ -53,18 +55,36 @@ type recordDeps struct {
 }
 
 // recordResampledPass records Live's master output onto an audio track whose
-// input is Resampling, using the armed-track + Session Record mechanism the
-// bounce tool has always used. Waiting is done on song time.
+// input is Resampling, with the armed-track + Session Record mechanism.
+//
+// What Live 11.0.12 was observed to do, and what this therefore relies on:
+//   - Session Record records into the armed track's slot in the *selected*
+//     scene, and only if that slot has a stop button.
+//   - Launching a scene reaches the armed track too: a stop button in the
+//     launched row cancels the recording, and so does launching the recording
+//     row itself. So the take lives in a row that is never launched, which
+//     keeps its stop button, while the track's other rows give theirs up.
+//   - Recording starts on the bar after Session Record goes on and ends on the
+//     bar after it goes off, so the file is exactly the window, bar to bar.
+//     Disarming before that last bar cuts the take short.
+//   - Session Record records on every armed track, and Live arms a MIDI track by
+//     itself when it is selected. Left alone, the listener's armed tracks would
+//     get stray clips and stop playing, so they are disarmed for the pass and
+//     re-armed afterwards.
 func recordResampledPass(c recordClient, deps recordDeps, plan recordPlan) (take recordedTake, err error) {
 	if len(plan.Spans) == 0 {
 		return recordedTake{}, errors.New("at least one span is required")
 	}
+	launched := map[int]bool{}
 	for _, span := range plan.Spans {
 		if span.Bars < 1 || span.Bars > recordMaxBars {
 			return recordedTake{}, fmt.Errorf("bars must be between 1 and %d", recordMaxBars)
 		}
-		if span.SceneIndex != nil && *span.SceneIndex < 0 {
-			return recordedTake{}, fmt.Errorf("invalid scene_index: %d", *span.SceneIndex)
+		if span.SceneIndex != nil {
+			if *span.SceneIndex < 0 {
+				return recordedTake{}, fmt.Errorf("invalid scene_index: %d", *span.SceneIndex)
+			}
+			launched[*span.SceneIndex] = true
 		}
 	}
 
@@ -76,6 +96,9 @@ func recordResampledPass(c recordClient, deps recordDeps, plan recordPlan) (take
 	if err != nil {
 		return recordedTake{}, err
 	}
+	// A command needs the same time to reach Live at any tempo, so the lead is
+	// set in seconds: at least a beat, and never the whole bar.
+	leadBeats := math.Min(math.Max(1, recordLeadSeconds*tempo/60), float64(beatsPerBar)-0.5)
 	if plan.Spans[0].SceneIndex == nil {
 		playing, err := queryAuditionIsPlaying(c)
 		if err != nil {
@@ -88,6 +111,17 @@ func recordResampledPass(c recordClient, deps recordDeps, plan recordPlan) (take
 		}
 	}
 
+	// Refuse a scene that does not exist before anything in the set is touched.
+	numScenes, err := queryNumScenes(c)
+	if err != nil {
+		return recordedTake{}, err
+	}
+	for sceneIndex := range launched {
+		if sceneIndex >= numScenes {
+			return recordedTake{}, fmt.Errorf("invalid scene_index: %d (the set has %d scenes)", sceneIndex, numScenes)
+		}
+	}
+
 	trackIndex, err := ensureNamedAudioTrack(c, plan.TrackName)
 	if err != nil {
 		return recordedTake{}, err
@@ -96,11 +130,39 @@ func recordResampledPass(c recordClient, deps recordDeps, plan recordPlan) (take
 	if err != nil {
 		return recordedTake{}, err
 	}
-	before, err := occupiedSlots(c, trackIndex)
+	occupied, err := occupiedSlots(c, trackIndex)
 	if err != nil {
 		return recordedTake{}, err
 	}
+	// The last row that is neither launched nor taken; a new scene if there is none.
+	row := -1
+	for i := len(occupied) - 1; i >= 0; i-- {
+		if !launched[i] && !occupied[i] {
+			row = i
+			break
+		}
+	}
+	if row < 0 {
+		if err := c.Send("/live/song/create_scene", int32(-1)); err != nil {
+			return recordedTake{}, err
+		}
+		deps.sleep(200 * time.Millisecond)
+		row = len(occupied)
+		occupied = append(occupied, false)
+	}
+
 	prevQuant, err := queryClipTriggerQuantization(c)
+	if err != nil {
+		return recordedTake{}, err
+	}
+	prevSelected := -1
+	if res, err := c.Query("/live/view/get/selected_scene"); err == nil && len(res) > 0 {
+		if v, err := abletonosc.AsInt(res[0]); err == nil {
+			prevSelected = v
+		}
+	}
+
+	othersArmed, err := armedTracksExcept(c, trackIndex)
 	if err != nil {
 		return recordedTake{}, err
 	}
@@ -109,29 +171,49 @@ func recordResampledPass(c recordClient, deps recordDeps, plan recordPlan) (take
 	defer func() {
 		if recording {
 			_ = c.Send("/live/song/set/session_record", int32(0))
+			_ = waitForRecordStatus(c, deps, 0, tempo, beatsPerBar)
 		}
 		if armed {
 			_ = c.Send("/live/track/set/arm", int32(trackIndex), int32(0))
 		}
+		for _, track := range othersArmed {
+			_ = c.Send("/live/track/set/arm", int32(track), int32(1))
+		}
 		_ = c.Send("/live/song/set/clip_trigger_quantization", int32(prevQuant))
+		if prevSelected >= 0 {
+			_ = c.Send("/live/view/set/selected_scene", int32(prevSelected))
+		}
 	}()
 
 	// Monitoring In and muted: Resampling carries the master without feeding back.
-	for _, step := range []struct {
-		address string
-		args    []interface{}
-	}{
-		{"/live/track/set/input_routing_type", []interface{}{int32(trackIndex), routing}},
-		{"/live/track/set/current_monitoring_state", []interface{}{int32(trackIndex), int32(0)}},
-		{"/live/track/set/mute", []interface{}{int32(trackIndex), int32(1)}},
-		{"/live/song/set/back_to_arranger", []interface{}{int32(0)}},
-		{"/live/song/set/clip_trigger_quantization", []interface{}{int32(auditionBarQuantization)}},
-	} {
-		if err := c.Send(step.address, step.args...); err != nil {
+	setup := [][]interface{}{
+		{"/live/track/set/input_routing_type", int32(trackIndex), routing},
+		{"/live/track/set/current_monitoring_state", int32(trackIndex), int32(0)},
+		{"/live/track/set/mute", int32(trackIndex), int32(1)},
+		{"/live/song/set/clip_trigger_quantization", int32(auditionBarQuantization)},
+	}
+	for i := range occupied {
+		keep := int32(0)
+		if i == row {
+			keep = 1
+		}
+		setup = append(setup, []interface{}{"/live/clip_slot/set/has_stop_button", int32(trackIndex), int32(i), keep})
+	}
+	for _, track := range othersArmed {
+		setup = append(setup, []interface{}{"/live/track/set/arm", int32(track), int32(0)})
+	}
+	for _, step := range setup {
+		if err := c.Send(step[0].(string), step[1:]...); err != nil {
 			return recordedTake{}, err
 		}
 	}
 	if plan.StopClipsAtEnds {
+		// A bounce starts from a clean slate. Setting back_to_arranger presses
+		// Live's "Back to Arrangement" button, which stops every Session clip, so
+		// it has no place in a pass that records what is already playing.
+		if err := c.Send("/live/song/set/back_to_arranger", int32(0)); err != nil {
+			return recordedTake{}, err
+		}
 		if err := c.Send("/live/song/stop_all_clips"); err != nil {
 			return recordedTake{}, err
 		}
@@ -147,21 +229,38 @@ func recordResampledPass(c recordClient, deps recordDeps, plan recordPlan) (take
 		return recordedTake{}, err
 	}
 	armed = true
+	if err := waitForArm(c, deps, trackIndex); err != nil {
+		return recordedTake{}, err
+	}
+	if err := c.Send("/live/view/set/selected_scene", int32(row)); err != nil {
+		return recordedTake{}, err
+	}
+	// Commands take a moment to reach Live. Sent just before a bar line they
+	// land after it and wait a whole bar more, so let a close bar line go by.
 	recordOn, err := queryCurrentSongTime(c)
 	if err != nil {
 		return recordedTake{}, err
+	}
+	if next := ceilBarBeat(recordOn, beatsPerBar); next-recordOn < leadBeats {
+		if err := waitUntilSongTime(c, deps.sleep, next, tempo); err != nil {
+			return recordedTake{}, err
+		}
+		if recordOn, err = queryCurrentSongTime(c); err != nil {
+			return recordedTake{}, err
+		}
 	}
 	if err := c.Send("/live/song/set/session_record", int32(1)); err != nil {
 		return recordedTake{}, err
 	}
 	recording = true
 
+	// Session Record and the first scene wait for the same bar line.
 	windowStart := ceilBarBeat(recordOn, beatsPerBar)
 	boundary := windowStart
 	for i, span := range plan.Spans {
 		if span.SceneIndex != nil {
 			if i > 0 {
-				if err := waitUntilSongTime(c, deps.sleep, boundary-recordFireLeadBeats, tempo); err != nil {
+				if err := waitUntilSongTime(c, deps.sleep, boundary-leadBeats, tempo); err != nil {
 					return recordedTake{}, err
 				}
 			}
@@ -169,20 +268,33 @@ func recordResampledPass(c recordClient, deps recordDeps, plan recordPlan) (take
 				return recordedTake{}, fmt.Errorf("fire scene %d: %w", *span.SceneIndex, err)
 			}
 		}
+		if i == 0 {
+			// Fail now rather than after the whole pass if Live did not start recording.
+			if err := waitUntilSongTime(c, deps.sleep, windowStart+recordCheckBeats, tempo); err != nil {
+				return recordedTake{}, err
+			}
+			if status, err := queryRecordStatus(c); err != nil {
+				return recordedTake{}, err
+			} else if status != 1 {
+				now, _ := queryCurrentSongTime(c)
+				return recordedTake{}, recordingMissing(plan.TrackName,
+					fmt.Sprintf("session record status is %d at beat %.2f; record went on at beat %.2f and should have started on beat %.0f", status, now, recordOn, windowStart))
+			}
+		}
 		boundary += float64(span.Bars * beatsPerBar)
 	}
-	if err := waitUntilSongTime(c, deps.sleep, boundary+recordTailBeats, tempo); err != nil {
+
+	// Switch off inside the last bar: the recording then ends on the window's end.
+	if err := waitUntilSongTime(c, deps.sleep, boundary-leadBeats, tempo); err != nil {
 		return recordedTake{}, err
 	}
-
 	if err := c.Send("/live/song/set/session_record", int32(0)); err != nil {
 		return recordedTake{}, err
 	}
-	recording = false
-	recordOff, err := queryCurrentSongTime(c)
-	if err != nil {
+	if err := waitForRecordStatus(c, deps, 0, tempo, beatsPerBar); err != nil {
 		return recordedTake{}, err
 	}
+	recording = false
 	if err := c.Send("/live/track/set/arm", int32(trackIndex), int32(0)); err != nil {
 		return recordedTake{}, err
 	}
@@ -197,17 +309,15 @@ func recordResampledPass(c recordClient, deps recordDeps, plan recordPlan) (take
 	}
 	take = recordedTake{
 		TrackIndex: trackIndex, RoutingType: routing, TempoBPM: tempo, BeatsPerBar: beatsPerBar,
-		RecordOnBeat: recordOn, WindowStart: windowStart, WindowBeats: boundary - windowStart, RecordOffBeat: recordOff,
+		RecordOnBeat: recordOn, WindowStart: windowStart, WindowBeats: boundary - windowStart, RecordOffBeat: boundary,
 	}
 	for slot, has := range after {
-		if has && (slot >= len(before) || !before[slot]) {
+		if has && (slot >= len(occupied) || !occupied[slot]) {
 			take.Slots = append(take.Slots, slot)
 		}
 	}
 	if len(take.Slots) == 0 {
-		return recordedTake{}, actionable("recording_missing",
-			fmt.Sprintf("no new clip appeared on the %q track after recording", plan.TrackName),
-			"Check that the track is an audio track Live can arm and that its input shows Resampling, then try again.")
+		return recordedTake{}, recordingMissing(plan.TrackName, "the pass ran, but no new clip appeared on the track")
 	}
 	for _, slot := range take.Slots {
 		// Once recording ends the new clip starts looping; it is muted, but stop it anyway.
@@ -219,6 +329,79 @@ func recordResampledPass(c recordClient, deps recordDeps, plan recordPlan) (take
 		take.FilePaths = append(take.FilePaths, path)
 	}
 	return take, nil
+}
+
+// armedTracksExcept lists the armed tracks other than the recording track.
+func armedTracksExcept(c recordClient, recordingTrack int) ([]int, error) {
+	res, err := c.Query("/live/song/get/track_data", int32(0), int32(-1), "track.arm")
+	if err != nil {
+		return nil, fmt.Errorf("read arm states: %w", err)
+	}
+	var armed []int
+	for track, v := range res {
+		on, err := asBoolish(v)
+		if err != nil {
+			return nil, err
+		}
+		if on && track != recordingTrack {
+			armed = append(armed, track)
+		}
+	}
+	return armed, nil
+}
+
+func recordingMissing(trackName, detail string) error {
+	return actionable("recording_missing",
+		fmt.Sprintf("Live did not record anything on the %q track (%s)", trackName, detail),
+		"Check that the track is an audio track Live can arm and that its input shows Resampling, then try again.")
+}
+
+func queryRecordStatus(c recordClient) (int, error) {
+	res, err := c.Query("/live/song/get/session_record_status")
+	if err != nil {
+		return 0, fmt.Errorf("get session record status: %w", err)
+	}
+	if err := ensureResponseLen(res, 1); err != nil {
+		return 0, err
+	}
+	return abletonosc.AsInt(res[0])
+}
+
+// waitForRecordStatus polls until Session Record reports want. Switching it off
+// only takes effect on the next bar line, so allow two bars and a little more.
+func waitForRecordStatus(c recordClient, deps recordDeps, want int, tempo float64, beatsPerBar int) error {
+	polls := int((2*float64(beatsPerBar)*60/tempo+2)/auditionPollInterval.Seconds()) + 1
+	for i := 0; i < polls; i++ {
+		status, err := queryRecordStatus(c)
+		if err != nil {
+			return err
+		}
+		if status == want {
+			return nil
+		}
+		deps.sleep(auditionPollInterval)
+	}
+	return fmt.Errorf("timed out waiting for session record status %d", want)
+}
+
+// waitForArm waits until Live reports the track as armed; Session Record
+// switched on before that records nothing.
+func waitForArm(c recordClient, deps recordDeps, trackIndex int) error {
+	for i := 0; i < 50; i++ {
+		res, err := c.Query("/live/track/get/arm", int32(trackIndex))
+		if err != nil {
+			return err
+		}
+		if len(res) >= 2 {
+			if on, err := asBoolish(res[1]); err == nil && on {
+				return nil
+			}
+		}
+		deps.sleep(auditionPollInterval)
+	}
+	return actionable("recording_missing",
+		"Live would not arm the recording track",
+		"Check that the track is an audio track and not frozen, then try again.")
 }
 
 // occupiedSlots reports, per scene, whether the track has a clip.

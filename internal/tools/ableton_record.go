@@ -209,7 +209,7 @@ func NewAbletonGetSessionRecord(g *genkit.Genkit, client *abletonosc.Client) ai.
 
 func NewAbletonBounceSessionPass(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
 	return genkit.DefineTool(g, "ableton_bounce_session_pass",
-		"Ableton Live: record a scene pass onto a Bounce audio track via Resampling and return the audio file Live wrote (leaves a Session clip; not a rendered export). Takes as long as the scenes play.",
+		"Ableton Live: record a scene pass onto a Bounce audio track via Resampling and return the audio file Live wrote (leaves a Session clip; not a rendered export). Takes as long as the scenes play. Starts from a clean slate (Back to Arrangement, all clips stopped), and for the length of the pass disarms any other armed track, which it re-arms afterwards.",
 		func(_ *ai.ToolContext, input BounceSessionPassInput) (BounceSessionPassOutput, error) {
 			return bounceSessionPass(client, recordDeps{
 				sleep: time.Sleep,
@@ -253,7 +253,7 @@ func bounceSessionPass(c recordClient, deps recordDeps, input BounceSessionPassI
 		TrackName:    trackName,
 		ScenesFired:  scenes,
 		BarsPerScene: bars,
-		DurationSec:  (take.RecordOffBeat - take.RecordOnBeat) * 60 / take.TempoBPM,
+		DurationSec:  take.WindowBeats * 60 / take.TempoBPM, // what was recorded, bar to bar
 		RoutingType:  take.RoutingType,
 		FilePaths:    take.FilePaths,
 	}, nil

@@ -67,11 +67,11 @@ func liveProbeTrack(t *testing.T, client *abletonosc.Client) int {
 	if err := client.Send("/live/track/set/name", int32(track), "Probe"); err != nil {
 		t.Fatal(err)
 	}
-	res, err := client.QueryWithTimeout(10*time.Second, "/live/track/load/browser_item", int32(track), "Operator")
-	if err != nil {
-		t.Fatalf("load Operator: %v", err)
+	// By path: the by-name search does not list top-level devices such as Operator.
+	res, err := client.QueryWithTimeout(10*time.Second, "/live/browser/load_at_path", int32(track), int32(-1), "Instruments", "Operator")
+	if err != nil || len(res) < 2 || res[1] != "loaded" {
+		t.Fatalf("load Operator: %v %v", res, err)
 	}
-	t.Logf("load Operator -> %v", res)
 	time.Sleep(time.Second)
 
 	written, err := writeClipNotation(client, ClipWriteInput{
@@ -132,7 +132,7 @@ func TestLiveMixerDB(t *testing.T) {
 		}
 		shown, silent, err := parseDBDisplay(got.Display)
 		t.Logf("asked %6.1f dB -> Live shows %q (raw %.4f)", want, got.Display, got.Value)
-		if err != nil || silent || math.Abs(shown-want) > 0.05 {
+		if err != nil || silent || math.Abs(shown-want) > 0.01 {
 			t.Errorf("asked %v dB, Live shows %q", want, got.Display)
 		}
 	}
@@ -147,7 +147,7 @@ func TestLiveMixerDB(t *testing.T) {
 		t.Fatalf("delta: %v", err)
 	}
 	t.Logf("-24 dB then delta -2 -> %q", got.Display)
-	if shown, _, _ := parseDBDisplay(got.Display); math.Abs(shown-(-26)) > 0.11 {
+	if shown, _, _ := parseDBDisplay(got.Display); math.Abs(shown-(-26)) > 0.02 {
 		t.Errorf("delta_db -2 from -24 dB shows %q, want -26.0 dB", got.Display)
 	}
 
@@ -172,7 +172,7 @@ func TestLiveMixerDB(t *testing.T) {
 		t.Logf("send check skipped or failed: %v", err)
 	} else {
 		t.Logf("send A -12 dB -> %q", send.Display)
-		if shown, _, _ := parseDBDisplay(send.Display); math.Abs(shown-(-12)) > 0.05 {
+		if shown, _, _ := parseDBDisplay(send.Display); math.Abs(shown-(-12)) > 0.01 {
 			t.Errorf("send shows %q, want -12.0 dB", send.Display)
 		}
 		off := -70.0
@@ -290,6 +290,13 @@ func TestLiveMeasureMix(t *testing.T) {
 	if _, err := store.Save(reference.Profile{Name: "self", Mix: first.Mix}); err != nil {
 		t.Fatal(err)
 	}
+	logLiveState := func(label string) {
+		playing, _ := client.Query("/live/song/get/is_playing")
+		slot, _ := client.Query("/live/track/get/playing_slot_index", int32(track))
+		states, _ := client.Query("/live/song/get/track_data", int32(0), int32(-1), "track.name", "track.mute", "track.solo", "track.arm")
+		t.Logf("%s: is_playing=%v probe playing slot=%v tracks(name,mute,solo,arm)=%v", label, playing, slot, states)
+	}
+	logLiveState("between the passes")
 	// Second pass without a scene: measure what is already playing, against the first.
 	second, err := measureMixTool(client, deps, MeasureMixInput{Bars: 2, References: []reference.Weight{{Name: "self"}},
 		Groups: []MeasureGroup{{Name: "probe", TrackIndices: []int{track}}}})

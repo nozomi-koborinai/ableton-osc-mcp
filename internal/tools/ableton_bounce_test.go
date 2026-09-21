@@ -20,14 +20,15 @@ func TestBounceSessionPassReturnsTheRecordedFiles(t *testing.T) {
 	if len(got.ScenesFired) != 2 || got.BarsPerScene != 2 {
 		t.Errorf("scenes/bars = %v/%d, want [1 0]/2", got.ScenesFired, got.BarsPerScene)
 	}
-	// Two scenes of two bars at 120 BPM: 8 s of music, plus the lead-in to the first bar.
-	if got.DurationSec < 8 || got.DurationSec > 10 {
-		t.Errorf("duration_sec = %v, want between 8 and 10", got.DurationSec)
+	// Two scenes of two bars at 120 BPM. Live records bar to bar, so the file is exactly that long.
+	if got.DurationSec != 8 {
+		t.Errorf("duration_sec = %v, want 8", got.DurationSec)
 	}
-	if countCalls(live, "/live/song/stop_all_clips") != 2 {
-		t.Errorf("a bounce stops all clips before and after the pass: %v", live.addresses())
+	if countCalls(live, "/live/song/stop_all_clips") != 2 || countCalls(live, "/live/song/set/back_to_arranger") != 1 {
+		t.Errorf("a bounce starts from a clean slate (Back to Arrangement, all clips stopped) and stops all clips after: %v", live.addresses())
 	}
-	if live.hasClip[2][0] != true {
+	// Scenes 0 and 1 are launched, so the take sits in row 2 and stays there.
+	if !live.hasClip[2][2] {
 		t.Error("a bounce keeps its clip (unlike a measurement)")
 	}
 }
@@ -37,6 +38,10 @@ func TestBounceSessionPassKeepsItsDefaults(t *testing.T) {
 
 	live := newFakeRecorder()
 	live.trackNames = []string{"Drums", "Bass", "Bounce"}
+	for t := range live.hasClip { // the default pass launches scenes 0-3: give the set five rows
+		live.hasClip[t] = []bool{false, false, false, false, false}
+		live.stopButton[t] = []bool{true, true, true, true, true}
+	}
 	got, err := bounceSessionPass(live, live.deps(), BounceSessionPassInput{})
 	if err != nil {
 		t.Fatalf("bounceSessionPass() error = %v", err)
