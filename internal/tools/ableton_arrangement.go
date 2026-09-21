@@ -286,12 +286,14 @@ func writeArrangement(c auditionClient, sleep auditionSleeper, input WriteArrang
 		if err != nil {
 			return WriteArrangementOutput{}, err
 		}
+		// Followed from the marker that covers the start bar, which need not begin
+		// on it: the song may be written again from a later bar than before.
 		reach := from
 		for _, marker := range markers {
-			if math.Abs(marker.Start-reach) > arrangementBeatSlack {
-				break
+			if marker.Start > reach+arrangementBeatSlack {
+				break // a gap: what comes after belongs to something else
 			}
-			reach = marker.End
+			reach = math.Max(reach, marker.End)
 		}
 		clearTo = math.Max(to, reach)
 	}
