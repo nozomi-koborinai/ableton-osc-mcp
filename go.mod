@@ -5,7 +5,7 @@ go 1.27.1
 require (
 	github.com/firebase/genkit/go v1.13.1
 	github.com/hypebeast/go-osc v0.0.0-20220308234300-cec5a8a1e5f5
-	github.com/mark3labs/mcp-go v0.43.2
+	github.com/mark3labs/mcp-go v1.1.0
 )
 
 require (
@@ -17,10 +17,12 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/google/dotprompt/go v0.0.0-20260708220100-73beb993ac95 // indirect
+	github.com/google/jsonschema-go v0.4.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/invopop/jsonschema v0.14.0 // indirect
 	github.com/mbleigh/raymond v0.0.0-20250414171441-6b3a58ab9e0a // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
