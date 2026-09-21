@@ -39,6 +39,12 @@ type Options struct {
 	ProjectTempo float64 // project BPM for length_bars_at_project_tempo; 0 when unknown
 	StartSec     float64 // window start in seconds; 0 means from the beginning
 	EndSec       float64 // window end in seconds; 0 means to the end
+	// Deep adds what one takes from a reference track: a beat and bar grid,
+	// chords on that grid with their bass, degree and loop, and the drum pattern
+	// of three bands. It costs seconds, so a mix measurement does not ask for it.
+	Deep        bool
+	DownbeatSec float64 // time of a bar line, from the start of the window, when it is known
+	DownbeatSet bool    // DownbeatSec was given (zero is a bar line like any other)
 }
 
 // applyWindow cuts the decoded audio down to [StartSec, EndSec). It returns the
@@ -96,6 +102,11 @@ type Result struct {
 	Scale             string            `json:"scale,omitempty"`
 	KeyConfidence     float64           `json:"key_confidence,omitempty"`
 	KeyAlternatives   []KeyHypothesis   `json:"key_alternatives,omitempty"`
+	Tuning            *Tuning           `json:"tuning,omitempty"`
+	Grid              *BeatGrid         `json:"grid,omitempty"`
+	Harmony           *Harmony          `json:"harmony,omitempty"`
+	DrumGrid          *DrumGrid         `json:"drum_grid,omitempty"`
+	DeepNote          string            `json:"deep_note,omitempty"`
 	ChordProgression  []ChordSegment    `json:"chord_progression,omitempty"`
 	ChordSummary      string            `json:"chord_summary,omitempty"`
 	Sections          []Section         `json:"sections,omitempty"`
@@ -183,6 +194,18 @@ func analyzeStream(r io.Reader, opts Options) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
+	if opts.DownbeatSet {
+		if !opts.Deep {
+			return Result{}, errors.New("downbeat_sec only means something with deep=true")
+		}
+		total := float64(len(audio.mono)) / float64(audio.sampleRate)
+		if opts.DownbeatSec < 0 || opts.DownbeatSec >= total {
+			return Result{}, fmt.Errorf("downbeat_sec %.2f is outside the analyzed audio (%.2f s)", opts.DownbeatSec, total)
+		}
+		if opts.DownbeatSec >= deepMaxSec {
+			return Result{}, fmt.Errorf("downbeat_sec %.2f is beyond the %d s the deep analysis reads; move the window there with start_sec and give the downbeat from its start", opts.DownbeatSec, deepMaxSec)
+		}
+	}
 	projectTempo := opts.ProjectTempo
 	mono := audio.mono
 	sampleRate := audio.sampleRate
@@ -215,7 +238,10 @@ func analyzeStream(r io.Reader, opts Options) (Result, error) {
 		OnsetCount:        onsets,
 		SuggestedWarpMode: warpMode,
 	}
-	if key, ok := estimateKey(analyze, sampleRate); ok {
+	tuning := estimateTuning(analyze, sampleRate)
+	out.Tuning = &tuning
+	key, keyOK := estimateKey(analyze, sampleRate, tuning.correction())
+	if keyOK {
 		out.Key = key.Tonic
 		out.Scale = key.Scale
 		out.KeyConfidence = key.Confidence
@@ -229,9 +255,12 @@ func analyzeStream(r io.Reader, opts Options) (Result, error) {
 		}
 		out.KeyAlternatives = alts
 	}
-	if chords, summary, ok := estimateChords(analyze, sampleRate); ok {
+	if chords, summary, ok := estimateChords(analyze, sampleRate, tuning.correction()); ok {
 		out.ChordProgression = chords
 		out.ChordSummary = summary
+	}
+	if opts.Deep {
+		out.DeepNote = analyzeDeep(&out, mono, sampleRate, opts, bpm, tuning.correction(), key, keyOK)
 	}
 	// Structure uses the full decoded audio (URL sources are already capped at
 	// fetch time), so local files get whole-track sections.

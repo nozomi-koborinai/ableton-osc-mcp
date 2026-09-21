@@ -34,11 +34,11 @@ type KeyResult struct {
 }
 
 // estimateKey computes a chromagram and matches it to major/minor key profiles.
-func estimateKey(samples []float64, sampleRate int) (KeyResult, bool) {
+func estimateKey(samples []float64, sampleRate int, tuningCents float64) (KeyResult, bool) {
 	if sampleRate <= 0 || len(samples) < keyFrameSize {
 		return KeyResult{}, false
 	}
-	chroma := chromagram(samples, sampleRate)
+	chroma := chromagram(samples, sampleRate, tuningCents)
 	var total float64
 	for _, v := range chroma {
 		total += v
@@ -126,9 +126,9 @@ func pearson(a, b []float64) float64 {
 }
 
 // chromagram accumulates spectral magnitude into 12 pitch classes across frames.
-func chromagram(samples []float64, sampleRate int) [12]float64 {
+func chromagram(samples []float64, sampleRate int, tuningCents float64) [12]float64 {
 	var chroma [12]float64
-	for _, frame := range frameChromas(samples, sampleRate) {
+	for _, frame := range frameChromasTuned(samples, sampleRate, tuningCents) {
 		for pc := 0; pc < 12; pc++ {
 			chroma[pc] += frame[pc]
 		}
@@ -140,6 +140,12 @@ func chromagram(samples []float64, sampleRate int) [12]float64 {
 // frame, at keyHopSize spacing. Each frame is used for both key and chord
 // estimation.
 func frameChromas(samples []float64, sampleRate int) [][12]float64 {
+	return frameChromasTuned(samples, sampleRate, 0)
+}
+
+// frameChromasTuned is frameChromas for a track that sits tuningCents away from
+// A = 440: every frequency is read against the track's own semitone grid.
+func frameChromasTuned(samples []float64, sampleRate int, tuningCents float64) [][12]float64 {
 	window := hannWindow(keyFrameSize)
 	buf := make([]float64, keyFrameSize)
 	minBin := int(math.Floor(keyMinFreq * float64(keyFrameSize) / float64(sampleRate)))
@@ -165,7 +171,7 @@ func frameChromas(samples []float64, sampleRate int) [][12]float64 {
 			}
 			freq := float64(bin) * float64(sampleRate) / float64(keyFrameSize)
 			midi := 69.0 + 12.0*math.Log2(freq/440.0)
-			pc := int(math.Round(midi)) % 12
+			pc := int(math.Round(midi-tuningCents/100)) % 12
 			if pc < 0 {
 				pc += 12
 			}

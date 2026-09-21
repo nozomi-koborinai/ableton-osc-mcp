@@ -12,6 +12,8 @@ type AnalyzeAudioURLInput struct {
 	ProjectTempo    *float64 `json:"project_tempo,omitempty" jsonschema:"description=Optional project BPM to estimate length in bars,minimum=20,maximum=400"`
 	StartSec        *float64 `json:"start_sec,omitempty" jsonschema:"description=Optional window start in seconds (e.g. to skip a long intro); everything reported then describes the window,minimum=0"`
 	EndSec          *float64 `json:"end_sec,omitempty" jsonschema:"description=Optional window end in seconds\\, at least 1 s after start_sec,minimum=0"`
+	Deep            bool     `json:"deep,omitempty" jsonschema:"description=Also work out a beat and bar grid\\, the chords on it (extended chords\\, bass\\, degree against the key\\, the loop they make) and the drum pattern of three bands on sixteenths. For studying a reference track; takes seconds longer and reads up to two minutes (choose them with start_sec/end_sec)"`
+	DownbeatSec     *float64 `json:"downbeat_sec,omitempty" jsonschema:"description=With deep: time of a bar line in seconds from the start of the window\\, when it is known (0 for a bounce that starts on its bar line). Otherwise the downbeat is estimated\\, with a confidence,minimum=0"`
 	SaveReferenceAs string   `json:"save_reference_as,omitempty" jsonschema:"description=Keep this track's numbers (never audio) as a reference profile under this name; 1-40 characters from a-z\\, 0-9\\, '-' and '_'. Writes to disk"`
 }
 
@@ -35,6 +37,7 @@ type AnalyzeAudioURLOutput struct {
 	Scale             string                         `json:"scale,omitempty"`
 	KeyConfidence     float64                        `json:"key_confidence,omitempty"`
 	KeyAlternatives   []audioanalyze.KeyHypothesis   `json:"key_alternatives,omitempty"`
+	Tuning            *audioanalyze.Tuning           `json:"tuning,omitempty"`
 	ChordProgression  []audioanalyze.ChordSegment    `json:"chord_progression,omitempty"`
 	ChordSummary      string                         `json:"chord_summary,omitempty"`
 	Sections          []audioanalyze.Section         `json:"sections,omitempty"`
@@ -45,6 +48,10 @@ type AnalyzeAudioURLOutput struct {
 	RangeStartSec     float64                        `json:"range_start_sec,omitempty"`
 	RangeEndSec       float64                        `json:"range_end_sec,omitempty"`
 	MixProfile        *audioanalyze.MixProfile       `json:"mix_profile,omitempty"`
+	Grid              *audioanalyze.BeatGrid         `json:"grid,omitempty"`
+	Harmony           *audioanalyze.Harmony          `json:"harmony,omitempty"`
+	DrumGrid          *audioanalyze.DrumGrid         `json:"drum_grid,omitempty"`
+	DeepNote          string                         `json:"deep_note,omitempty"`
 	SavedReference    string                         `json:"saved_reference,omitempty"`
 	LengthBarsAtBPM   float64                        `json:"length_bars_at_project_tempo,omitempty"`
 	Note              string                         `json:"note"`
@@ -53,13 +60,13 @@ type AnalyzeAudioURLOutput struct {
 
 func NewAbletonAnalyzeAudioURL(g *genkit.Genkit, store referenceStore) ai.Tool {
 	return genkit.DefineTool(g, "ableton_analyze_audio_url",
-		"Reference-analyze audio at an http(s) URL (e.g. YouTube) for tempo (+ half/double alternatives), key/scale (+ alternative), chords, section map, rhythm_density, rms_per_beat, band_balance, match_axes, texture, and mix_profile (integrated LUFS, true peak, crest, 9-band spectrum in dB, per-band stereo width). Streams via yt-dlp+ffmpeg in memory and never saves audio or extracts melodies/notes. `save_reference_as` writes the numbers to the reference profile file on disk — set it only when the person asked to keep this track as a reference. Requires yt-dlp and ffmpeg on PATH; you are responsible for your right to access the URL.",
+		"Reference-analyze audio at an http(s) URL (e.g. YouTube) for tempo (+ half/double alternatives), key/scale (+ alternative), chords, section map, rhythm_density, rms_per_beat, band_balance, match_axes, texture, and mix_profile (integrated LUFS, true peak, crest, 9-band spectrum in dB, per-band stereo width). Key and chords are corrected for the track's tuning (`tuning`: cents away from A=440), which pitched-down references need. `deep` adds what one takes from a reference: a beat and bar `grid`, `harmony` (extended chords with bass, degree against the key, and the loop they make) and a `drum_grid` (kick/808, snare/clap, hats on sixteenths over two bars) — statistics folded over the track, from the full mix without stem separation, each with a confidence or a note on what blurs it; not a transcription. Streams via yt-dlp+ffmpeg in memory and never saves audio or extracts melodies/notes. `save_reference_as` writes the numbers to the reference profile file on disk — set it only when the person asked to keep this track as a reference. Requires yt-dlp and ffmpeg on PATH; you are responsible for your right to access the URL.",
 		func(tc *ai.ToolContext, input AnalyzeAudioURLInput) (AnalyzeAudioURLOutput, error) {
 			saveAs, err := checkReferenceName(store, input.SaveReferenceAs)
 			if err != nil {
 				return AnalyzeAudioURLOutput{}, err
 			}
-			got, err := audioanalyze.AnalyzeURL(tc, input.URL, analysisOptions(input.ProjectTempo, input.StartSec, input.EndSec))
+			got, err := audioanalyze.AnalyzeURL(tc, input.URL, analysisOptions(input.ProjectTempo, input.StartSec, input.EndSec, input.Deep, input.DownbeatSec))
 			if err != nil {
 				return AnalyzeAudioURLOutput{}, err
 			}
@@ -88,6 +95,7 @@ func NewAbletonAnalyzeAudioURL(g *genkit.Genkit, store referenceStore) ai.Tool {
 				Scale:             got.Scale,
 				KeyConfidence:     got.KeyConfidence,
 				KeyAlternatives:   got.KeyAlternatives,
+				Tuning:            got.Tuning,
 				ChordProgression:  got.ChordProgression,
 				ChordSummary:      got.ChordSummary,
 				Sections:          got.Sections,
@@ -98,6 +106,10 @@ func NewAbletonAnalyzeAudioURL(g *genkit.Genkit, store referenceStore) ai.Tool {
 				RangeStartSec:     got.RangeStartSec,
 				RangeEndSec:       got.RangeEndSec,
 				MixProfile:        got.MixProfile,
+				Grid:              got.Grid,
+				Harmony:           capHarmony(got.Harmony, maxURLHarmonyChords),
+				DrumGrid:          got.DrumGrid,
+				DeepNote:          got.DeepNote,
 				SavedReference:    saveAs,
 				LengthBarsAtBPM:   got.LengthBarsAtBPM,
 				Note:              got.Note,
