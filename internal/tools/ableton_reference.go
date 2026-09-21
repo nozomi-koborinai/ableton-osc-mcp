@@ -147,8 +147,25 @@ func saveReference(store referenceStore, name, kind, source string, got audioana
 }
 
 // analysisOptions turns the optional tool inputs into audioanalyze.Options.
-func analysisOptions(projectTempo, startSec, endSec *float64) audioanalyze.Options {
-	var opts audioanalyze.Options
+// maxURLHarmonyChords bounds the chord list of a URL analysis, which covers a
+// whole track: the loop and its summary say the rest.
+const maxURLHarmonyChords = 64
+
+func capHarmony(harmony *audioanalyze.Harmony, limit int) *audioanalyze.Harmony {
+	if harmony == nil || len(harmony.Chords) <= limit {
+		return harmony
+	}
+	capped := *harmony
+	capped.Chords = capped.Chords[:limit]
+	capped.Note += fmt.Sprintf(" Only the first %d chords are listed.", limit)
+	return &capped
+}
+
+func analysisOptions(projectTempo, startSec, endSec *float64, deep bool, downbeatSec *float64) audioanalyze.Options {
+	opts := audioanalyze.Options{Deep: deep}
+	if downbeatSec != nil {
+		opts.DownbeatSec, opts.DownbeatSet = *downbeatSec, true
+	}
 	if projectTempo != nil {
 		opts.ProjectTempo = *projectTempo
 	}

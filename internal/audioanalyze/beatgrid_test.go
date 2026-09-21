@@ -147,3 +147,21 @@ func TestBeatGridNeedsEnoughMusic(t *testing.T) {
 		t.Error("no tempo, no grid")
 	}
 }
+
+// Seen on a real drill beat: the tempo estimate came in at two thirds of the
+// tempo (95.7 for 143), and everything built on the grid fell apart. Only one
+// of the related tempos puts the onsets on its sixteenths.
+func TestBeatGridSettlesOnTheTempoWhoseSixteenthsTheOnsetsSitOn(t *testing.T) {
+	t.Parallel()
+
+	beat := defaultTestBeat()
+	beat.bars = 16
+	beat.high = []int{0, 2, 3, 5, 6, 8, 11, 12, 15, 16, 18, 19, 21, 22, 24, 31} // hats that do not just tick eighths
+	samples := beat.render()
+	for name, estimate := range map[string]float64{"two thirds": 140 * 2.0 / 3, "three halves": 210, "four thirds": 140 * 4.0 / 3, "right": 140.4} {
+		grid, ok := buildBeatGrid(samples, beat.sampleRate, beatGridOptions{BPM: estimate})
+		if !ok || math.Abs(grid.BPM-140) > 0.3 {
+			t.Errorf("estimate %s (%.1f BPM): grid at %.2f BPM, want 140", name, estimate, grid.BPM)
+		}
+	}
+}

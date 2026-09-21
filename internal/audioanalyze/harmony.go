@@ -17,7 +17,6 @@ const (
 	harmonyBassSure        = 0.5  // share of the bass votes one pitch class needs to be taken for the bass
 	harmonyBassBonus       = 0.15 // added to the fit of a chord whose root the bass plays
 	harmonyMinFit          = 0.3
-	harmonyMinKeyMargin    = 0.05
 	harmonyCycleAgreement  = 0.7
 	harmonyCycleTolerance  = 0.1
 	harmonySilenceShare    = 0.02 // a segment this quiet next to the loudest one has no chord
@@ -43,6 +42,7 @@ type Harmony struct {
 	CycleBars    int            `json:"cycle_bars,omitempty" jsonschema:"description=Length of the progression that repeats"`
 	Cycle        []string       `json:"cycle,omitempty" jsonschema:"description=One round of it\\, a chord per half bar"`
 	CycleDegrees []string       `json:"cycle_degrees,omitempty"`
+	Key          string         `json:"key,omitempty" jsonschema:"description=The loop's own home: the root it keeps coming back to\\, major or minor by the chords on it. Degrees are measured from here"`
 	Summary      string         `json:"summary" jsonschema:"description=One round\\, bar by bar: D#m(add9) | D#m(add9) | Badd9 | C#add9"`
 	Note         string         `json:"note"`
 }
@@ -105,15 +105,11 @@ func estimateHarmony(samples []float64, sampleRate int, grid BeatGrid, tuningCen
 		loudest = math.Max(loudest, energy[s])
 	}
 
-	tonic := -1
-	if keyOK && key.Confidence >= harmonyMinKeyMargin {
-		tonic = pitchClassIndex(key.Tonic)
-	}
 	labels := make([]HarmonyChord, segments)
 	for s := range labels {
 		chord := HarmonyChord{Chord: "N.C."}
 		if energy[s] > harmonySilenceShare*loudest {
-			chord = nameChord(upper[s], bass[s], tonic)
+			chord = nameChord(upper[s], bass[s])
 		}
 		chord.Bar = s*harmonyBeatsPerSegment/beatsPerBar + 1
 		chord.Beat = float64(s*harmonyBeatsPerSegment%beatsPerBar + 1)
@@ -121,8 +117,13 @@ func estimateHarmony(samples []float64, sampleRate int, grid BeatGrid, tuningCen
 		chord.StartSec = round2(grid.DownbeatSec + float64(s)*segmentSec)
 		labels[s] = chord
 	}
+	cycleBars, cycle := findChordCycle(labels)
+	home, homeName := harmonyHome(labels, cycle)
+	for s := range labels {
+		labels[s].Degree = degreeOf(labels[s], home)
+	}
 
-	out := Harmony{Note: "Chords are read from the full mix: a loud vocal or lead blurs the extensions (7ths, 9ths); roots and the loop are the sturdier part."}
+	out := Harmony{Note: "Chords are read from the full mix: a loud vocal or lead blurs the extensions (7ths, 9ths); roots and the loop are the sturdier part. A distorted 808 can make a minor chord read as major: its fifth harmonic is a major third above the root."}
 	if grid.DownbeatConfidence < 0.2 {
 		out.Note += " The downbeat is a guess here: bars may be rotated by one to three beats; pass downbeat_sec to pin it."
 	}
@@ -134,7 +135,17 @@ func estimateHarmony(samples []float64, sampleRate int, grid BeatGrid, tuningCen
 		}
 		out.Chords = append(out.Chords, chord)
 	}
-	out.CycleBars, out.Cycle, out.CycleDegrees = findChordCycle(labels)
+	out.CycleBars, out.Key = cycleBars, homeName
+	for _, chord := range cycle {
+		out.Cycle = append(out.Cycle, chord.Chord)
+		out.CycleDegrees = append(out.CycleDegrees, degreeOf(chord, home))
+	}
+	if keyOK && homeName != "" && key.Tonic+" "+key.Scale != homeName {
+		out.Note += " The overall key estimate says " + key.Tonic + " " + key.Scale + "; degrees here are measured from the loop's own home, " + homeName + "."
+	}
+	if cycleBars == 0 {
+		out.Note += " No loop was found over this range: intros and breakdowns blur it. Analyze the stretch that loops (start_sec/end_sec) for a cleaner answer."
+	}
 	round := out.Cycle
 	if len(round) == 0 {
 		for _, chord := range labels[:min(len(labels), 16)] {
@@ -223,7 +234,7 @@ func bassVotes(samples []float64, sampleRate int, tuningCents float64, segments 
 // the level of the chord tones before an extended chord beats its triad. Some
 // chords are the same notes under two names (Dsus2, Asus4): the bass, when it
 // is clear, speaks for the root it plays.
-func nameChord(upper, bass [12]float64, tonic int) HarmonyChord {
+func nameChord(upper, bass [12]float64) HarmonyChord {
 	bassPC, bassTotal := -1, 0.0
 	for pc, v := range bass {
 		bassTotal += v
@@ -268,13 +279,73 @@ func nameChord(upper, bass [12]float64, tonic int) HarmonyChord {
 			}
 		}
 	}
-	if tonic >= 0 {
-		best.Degree = degreeNames[(bestRoot-tonic+12)%12]
-		if bestQuality.minor {
-			best.Degree = strings.ToLower(best.Degree)
+	return best
+}
+
+func isMinorQuality(quality string) bool {
+	for _, q := range harmonyQualities {
+		if q.suffix == quality {
+			return q.minor
 		}
 	}
-	return best
+	return false
+}
+
+// degreeOf is a chord's root measured from the home note: ♭VI, or vi when the
+// chord on it is minor.
+func degreeOf(chord HarmonyChord, home int) string {
+	root := pitchClassIndex(chord.Root)
+	if home < 0 || root < 0 {
+		return ""
+	}
+	degree := degreeNames[(root-home+12)%12]
+	if isMinorQuality(chord.Quality) {
+		degree = strings.ToLower(degree)
+	}
+	return degree
+}
+
+// harmonyHome is the note the chords keep coming back to, and whether the
+// chords on it are minor or major. The key estimate of a whole mix is easily
+// led astray by a melody; a loop's most-played root rarely is. Between roots
+// played equally often, the one the loop opens on is home.
+func harmonyHome(labels, cycle []HarmonyChord) (int, string) {
+	var played [12]int
+	for _, chord := range labels {
+		if root := pitchClassIndex(chord.Root); root >= 0 {
+			played[root]++
+		}
+	}
+	most := 0
+	for _, n := range played {
+		most = max(most, n)
+	}
+	if most == 0 {
+		return -1, ""
+	}
+	home := -1
+	for _, chord := range append(append([]HarmonyChord{}, cycle...), labels...) {
+		if root := pitchClassIndex(chord.Root); root >= 0 && played[root] == most {
+			home = root
+			break
+		}
+	}
+	minor, major := 0, 0
+	for _, chord := range labels {
+		if pitchClassIndex(chord.Root) != home {
+			continue
+		}
+		if isMinorQuality(chord.Quality) {
+			minor++
+		} else if !strings.HasPrefix(chord.Quality, "sus") {
+			major++
+		}
+	}
+	scale := "major"
+	if minor > major {
+		scale = "minor"
+	}
+	return home, pitchClassNames[home] + " " + scale
 }
 
 func pitchClassIndex(name string) int {
@@ -286,11 +357,14 @@ func pitchClassIndex(name string) int {
 	return -1
 }
 
-// findChordCycle looks for the length after which the half-bar labels repeat:
+// findChordCycle looks for the length after which the half-bar chords repeat:
 // the shortest of 1, 2, 4, 8, 16 bars that agrees with itself about as well as
 // the best of them does. A loop of eight bars whose halves differ in one bar
-// agrees with itself at four bars too, but clearly less well.
-func findChordCycle(labels []HarmonyChord) (int, []string, []string) {
+// agrees with itself at four bars too, but clearly less well. Rounds are
+// compared by their roots: on a real mix the same bar comes out as C#sus2 in
+// one round and C#add9 in the next, and by full names nothing ever repeats.
+// Each place in the loop is then given the name it had most often.
+func findChordCycle(labels []HarmonyChord) (int, []HarmonyChord) {
 	perBar := beatsPerBar / harmonyBeatsPerSegment
 	agreement := map[int]float64{}
 	best := 0.0
@@ -298,11 +372,11 @@ func findChordCycle(labels []HarmonyChord) (int, []string, []string) {
 		shift := bars * perBar
 		same, compared := 0, 0
 		for i := 0; i+shift < len(labels); i++ {
-			if labels[i].Chord == "N.C." || labels[i+shift].Chord == "N.C." {
+			if labels[i].Root == "" || labels[i+shift].Root == "" {
 				continue
 			}
 			compared++
-			if labels[i].Chord == labels[i+shift].Chord {
+			if labels[i].Root == labels[i+shift].Root {
 				same++
 			}
 		}
@@ -317,26 +391,19 @@ func findChordCycle(labels []HarmonyChord) (int, []string, []string) {
 			continue
 		}
 		shift := bars * perBar
-		cycle, degrees := make([]string, shift), make([]string, shift)
-		for position := 0; position < shift; position++ {
+		cycle := make([]HarmonyChord, shift)
+		for position := range cycle {
 			counts := map[string]int{}
 			for i := position; i < len(labels); i += shift {
 				counts[labels[i].Chord]++
-				if counts[labels[i].Chord] > counts[cycle[position]] || cycle[position] == "" {
-					cycle[position], degrees[position] = labels[i].Chord, labels[i].Degree
+				if cycle[position].Chord == "" || counts[labels[i].Chord] > counts[cycle[position].Chord] {
+					cycle[position] = labels[i]
 				}
 			}
 		}
-		withDegrees := false
-		for _, degree := range degrees {
-			withDegrees = withDegrees || degree != ""
-		}
-		if !withDegrees {
-			degrees = nil
-		}
-		return bars, cycle, degrees
+		return bars, cycle
 	}
-	return 0, nil, nil
+	return 0, nil
 }
 
 // summarizeBars writes half-bar labels bar by bar: one name when a bar holds one

@@ -134,7 +134,42 @@ func TestHarmonyLeavesSilenceUnnamed(t *testing.T) {
 	if want := []string{"C", "N.C.", "C"}; !reflect.DeepEqual(chordNames(got), want) {
 		t.Errorf("chords = %v, want %v", chordNames(got), want)
 	}
-	if got.Chords[0].Degree != "" {
-		t.Errorf("degree = %q without a key to measure it against", got.Chords[0].Degree)
+	if got.Key != "C major" || got.Chords[0].Degree != "I" {
+		t.Errorf("key = %q, first degree = %q; want the one chord there is to be home", got.Key, got.Chords[0].Degree)
+	}
+}
+
+// Seen on a real mix: the same bar came out as C#sus2 in one round and C#add9
+// in the next, and a loop compared by full names never repeated. Roots repeat.
+func TestHarmonyFindsTheLoopWhenTheColoursOfAChordVary(t *testing.T) {
+	t.Parallel()
+
+	am, f := testChord{bass: 33, notes: []int{57, 60, 64}}, testChord{bass: 41, notes: []int{60, 65, 69}}
+	amAdd9, fMaj7 := testChord{bass: 33, notes: []int{57, 60, 64, 71}}, testChord{bass: 41, notes: []int{60, 65, 69, 76}}
+	c, g, gSus := testChord{bass: 36, notes: []int{60, 64, 67}}, testChord{bass: 43, notes: []int{62, 67, 71}}, testChord{bass: 43, notes: []int{62, 67, 72}}
+	song := []testChord{am, f, c, g, amAdd9, f, c, gSus, am, fMaj7, c, g, am, f, c, g}
+	got := harmonyOf(t, song, KeyResult{})
+	if got.CycleBars != 4 || got.Summary != "Am | F | C | G" {
+		t.Errorf("cycle_bars = %d, summary = %q (chords %v); want the four-bar loop in its most usual colours", got.CycleBars, got.Summary, chordNames(got))
+	}
+}
+
+// Seen on a real mix: the key estimate of the first minute said F major for a
+// loop in D# minor, and every degree was measured from the wrong note. The
+// loop knows its own home: the root it keeps coming back to.
+func TestHarmonyMeasuresDegreesFromTheLoopsOwnHome(t *testing.T) {
+	t.Parallel()
+
+	am, f, g, c := testChord{bass: 33, notes: []int{57, 60, 64}}, testChord{bass: 41, notes: []int{60, 65, 69}}, testChord{bass: 43, notes: []int{62, 67, 71}}, testChord{bass: 36, notes: []int{60, 64, 67}}
+	loop := []testChord{am, am, f, g, am, c, f, g}
+	got := harmonyOf(t, append(append([]testChord{}, loop...), loop...), KeyResult{Tonic: "F", Scale: "major", Confidence: 0.16})
+	if got.Key != "A minor" {
+		t.Errorf("harmony key = %q, want A minor: the root the loop keeps coming back to, and minor there", got.Key)
+	}
+	if want := []string{"i", "i", "i", "i", "♭VI", "♭VI", "♭VII", "♭VII", "i", "i", "♭III", "♭III", "♭VI", "♭VI", "♭VII", "♭VII"}; !reflect.DeepEqual(got.CycleDegrees, want) {
+		t.Errorf("cycle_degrees = %v, want %v", got.CycleDegrees, want)
+	}
+	if !strings.Contains(got.Note, "F major") {
+		t.Errorf("note = %q; it should say that the overall key estimate (F major) disagrees", got.Note)
 	}
 }

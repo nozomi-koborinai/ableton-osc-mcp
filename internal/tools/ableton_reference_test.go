@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nozomi-koborinai/ableton-osc-mcp/internal/audioanalyze"
 	"github.com/nozomi-koborinai/ableton-osc-mcp/internal/reference"
 )
 
@@ -211,5 +212,31 @@ func TestListReferenceProfilesSummarizesTheStore(t *testing.T) {
 	p := got.Profiles[0]
 	if p.Name != "low" || p.SourceKind != "file" || p.Source != path || len(p.Bands) != 9 || p.SavedAt == "" {
 		t.Errorf("summary = %+v", p)
+	}
+}
+
+func TestAnalysisOptionsCarryTheDeepRequest(t *testing.T) {
+	t.Parallel()
+
+	zero := 0.0
+	opts := analysisOptions(nil, nil, nil, true, &zero)
+	if !opts.Deep || !opts.DownbeatSet || opts.DownbeatSec != 0 {
+		t.Errorf("opts = %+v; a downbeat of zero is a downbeat that was given", opts)
+	}
+	if opts := analysisOptions(nil, nil, nil, false, nil); opts.Deep || opts.DownbeatSet {
+		t.Errorf("opts = %+v, want nothing deep about a plain analysis", opts)
+	}
+}
+
+func TestCapHarmonyKeepsURLRepliesSmall(t *testing.T) {
+	t.Parallel()
+
+	long := &audioanalyze.Harmony{Chords: make([]audioanalyze.HarmonyChord, 200), Summary: "Am | F", Note: "n."}
+	got := capHarmony(long, maxURLHarmonyChords)
+	if len(got.Chords) != 64 || got.Summary != "Am | F" || !strings.Contains(got.Note, "first 64") || len(long.Chords) != 200 {
+		t.Errorf("capped to %d chords, note %q; the original has %d", len(got.Chords), got.Note, len(long.Chords))
+	}
+	if short := (&audioanalyze.Harmony{Chords: make([]audioanalyze.HarmonyChord, 3)}); capHarmony(short, 64) != short || capHarmony(nil, 64) != nil {
+		t.Error("a short list and no list pass through untouched")
 	}
 }

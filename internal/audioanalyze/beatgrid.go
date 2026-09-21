@@ -7,11 +7,15 @@ const (
 	fluxHopSize   = 256
 	// An estimated tempo is refined within this share of itself: over three
 	// minutes, a third of a percent is half a second of drift.
-	beatTempoSearch = 0.015
-	beatTempoStep   = 0.02 // BPM
-	beatGridMinBars = 2
-	lowOnsetSpanSec = 0.05
-	beatsPerBar     = 4 // 4/4 is assumed throughout
+	beatTempoSearch       = 0.015
+	beatTempoStep         = 0.02 // BPM
+	beatGridMinBars       = 2
+	lowOnsetSpanSec       = 0.05
+	beatMinTempo          = 60.0
+	beatMaxTempo          = 200.0
+	beatFitMargin         = 0.03 // a related tempo has to fit this much better than the estimate to replace it
+	sixteenthFitWindowSec = 0.015
+	beatsPerBar           = 4 // 4/4 is assumed throughout
 )
 
 // Bands of the onset envelopes. Low is kick and 808 attacks, mid the crack of
@@ -174,7 +178,6 @@ func buildBeatGrid(samples []float64, sampleRate int, opts beatGridOptions) (Bea
 	if durationSec < float64(beatGridMinBars*beatsPerBar)*60/opts.BPM {
 		return BeatGrid{}, false
 	}
-	hopSec := float64(fluxHopSize) / float64(sampleRate)
 	low, mid, _ := onsetEnvelopes(samples, sampleRate)
 	// Kicks and snares sit on the beats; hats fill the gaps evenly and would pull
 	// the grid on to the off-beats as easily as on to the beats.
@@ -189,22 +192,24 @@ func buildBeatGrid(samples []float64, sampleRate int, opts beatGridOptions) (Bea
 		grid.BeatOffsetSec = math.Mod(opts.DownbeatSec, grid.beatSec())
 		grid.DownbeatConfidence = 1
 	} else {
-		// The comb: every beat of a candidate grid, summed. Tempo and phase together.
-		best := -1.0
-		lowest, highest := opts.BPM, opts.BPM
-		if !opts.ExactTempo {
-			lowest, highest = opts.BPM*(1-beatTempoSearch), opts.BPM*(1+beatTempoSearch)
+		// An estimated tempo is often a simple ratio away from the real one (two
+		// thirds, on a swung drill beat). Each related tempo gets its best grid, and
+		// the one whose sixteenths the onsets actually sit on wins; the estimate
+		// itself stays unless another is clearly better.
+		_, _, high := onsetEnvelopes(samples, sampleRate)
+		everything := make([]float64, len(pulse))
+		for i := range everything {
+			everything[i] = pulse[i] + high[i]
 		}
-		for bpm := lowest; bpm <= highest+1e-9; bpm += beatTempoStep {
-			beatSec := 60 / bpm
-			for phase := 0.0; phase < beatSec; phase += hopSec {
-				score := 0.0
-				for at := phase; at < durationSec; at += beatSec {
-					score += envelopeAt(pulse, at, sampleRate)
-				}
-				if score /= durationSec / beatSec; score > best {
-					best, grid.BPM, grid.BeatOffsetSec = score, bpm, phase
-				}
+		bestFit := -1.0
+		for _, ratio := range []float64{1, 1.5, 2.0 / 3, 0.75, 4.0 / 3, 2, 0.5} {
+			centre := opts.BPM * ratio
+			if opts.ExactTempo && ratio != 1 || centre < beatMinTempo || centre > beatMaxTempo {
+				continue
+			}
+			bpm, phase := combBeats(pulse, sampleRate, durationSec, centre, opts.ExactTempo)
+			if fit := sixteenthFit(everything, sampleRate, bpm, phase); fit > bestFit+beatFitMargin || bestFit < 0 {
+				bestFit, grid.BPM, grid.BeatOffsetSec = fit, bpm, phase
 			}
 		}
 		grid.BPM = round2(grid.BPM)
@@ -216,6 +221,54 @@ func buildBeatGrid(samples []float64, sampleRate int, opts beatGridOptions) (Bea
 	}
 	grid.BeatOffsetSec, grid.DownbeatSec = round3(grid.BeatOffsetSec), round3(grid.DownbeatSec)
 	return grid, true
+}
+
+// combBeats finds tempo and phase together: every beat of a candidate grid,
+// summed. An estimated tempo is searched a little either side of itself.
+func combBeats(pulse []float64, sampleRate int, durationSec, centreBPM float64, exact bool) (float64, float64) {
+	hopSec := float64(fluxHopSize) / float64(sampleRate)
+	lowest, highest := centreBPM, centreBPM
+	if !exact {
+		lowest, highest = centreBPM*(1-beatTempoSearch), centreBPM*(1+beatTempoSearch)
+	}
+	best, bestBPM, bestPhase := -1.0, centreBPM, 0.0
+	for bpm := lowest; bpm <= highest+1e-9; bpm += beatTempoStep {
+		beatSec := 60 / bpm
+		for phase := 0.0; phase < beatSec; phase += hopSec {
+			score := 0.0
+			for at := phase; at < durationSec; at += beatSec {
+				score += envelopeAt(pulse, at, sampleRate)
+			}
+			if score /= durationSec / beatSec; score > best {
+				best, bestBPM, bestPhase = score, bpm, phase
+			}
+		}
+	}
+	return bestBPM, bestPhase
+}
+
+// sixteenthFit says how much of the onset energy falls on the grid's sixteenths,
+// beyond what would fall there by chance. The window around a grid point is a
+// fixed 15 ms, the width of an onset in the envelope: a window that grew with
+// the step would flatter slow tempos, whose wider windows swallow whole onsets.
+func sixteenthFit(onsets []float64, sampleRate int, bpm, phaseSec float64) float64 {
+	stepSec := 60 / bpm / 4
+	var near, total float64
+	for i, v := range onsets {
+		if v <= 0 {
+			continue
+		}
+		at := (float64(i*fluxHopSize)+fluxFrameSize/2)/float64(sampleRate) - phaseSec
+		total += v
+		if math.Abs(at-math.Round(at/stepSec)*stepSec) <= sixteenthFitWindowSec {
+			near += v
+		}
+	}
+	chance := 2 * sixteenthFitWindowSec / stepSec
+	if total <= 0 || chance >= 1 {
+		return 0
+	}
+	return (near/total - chance) / (1 - chance)
 }
 
 // findDownbeat picks which beat starts the bar. Two things tend to happen on a
