@@ -276,23 +276,51 @@ func writeArrangement(c auditionClient, sleep auditionSleeper, input WriteArrang
 			}
 		}
 	}
-	var inTheWay []string
-	for _, track := range owned {
-		clips, err := queryArrangementClips(c, track, from, to)
+	// A version of the song written here before may have been longer. The
+	// Sections track tells how far it went: its markers follow one another from
+	// the start bar. The song owns that stretch too, or the old ending would
+	// play on behind a shorter rewrite (seen on a real Live).
+	clearTo := to
+	if sectionsTrack >= 0 {
+		markers, err := queryArrangementClips(c, sectionsTrack, from, 1e9)
 		if err != nil {
 			return WriteArrangementOutput{}, err
 		}
-		for _, clip := range clips {
-			inTheWay = append(inTheWay, fmt.Sprintf("%q on track %d (%s), bars %s-%s", clip.Name, track, trackNames[track], trimFloat(clip.Start/bar+1), trimFloat(clip.End/bar)))
+		reach := from
+		for _, marker := range markers {
+			if math.Abs(marker.Start-reach) > arrangementBeatSlack {
+				break
+			}
+			reach = marker.End
+		}
+		clearTo = math.Max(to, reach)
+	}
+
+	var inTheWay []string
+	blocked := 0
+	for _, track := range owned {
+		clips, err := queryArrangementClips(c, track, from, clearTo)
+		if err != nil {
+			return WriteArrangementOutput{}, err
+		}
+		blocked += len(clips)
+		for _, span := range foldArrangementClips(clips, bar) { // copies in a row read as one entry
+			copies := max(span.Repeats, 1)
+			entry := fmt.Sprintf("%q on track %d (%s), bars %s-%s", span.Name, track, trackNames[track],
+				trimFloat(span.StartBar), trimFloat(span.StartBar+span.Bars*float64(copies)-1))
+			if copies > 1 {
+				entry += fmt.Sprintf(" (%d clips)", copies)
+			}
+			inTheWay = append(inTheWay, entry)
 		}
 	}
 	if len(inTheWay) > 0 && !input.Overwrite {
 		shown := inTheWay
-		if len(shown) > 6 {
-			shown = append(shown[:6:6], fmt.Sprintf("and %d more", len(inTheWay)-6))
+		if len(shown) > 8 {
+			shown = append(shown[:8:8], fmt.Sprintf("and %d more entries", len(inTheWay)-8))
 		}
 		return WriteArrangementOutput{}, actionable("arrangement_occupied",
-			"the Arrangement already has clips where the song would go: "+strings.Join(shown, "; "),
+			fmt.Sprintf("the Arrangement already has %d clips where the song would go: %s", blocked, strings.Join(shown, "; ")),
 			"Ask the person whether those may be replaced, then pass overwrite=true; or write the song further along with start_bar. Nothing in Live was touched.")
 	}
 
@@ -301,7 +329,7 @@ func writeArrangement(c auditionClient, sleep auditionSleeper, input WriteArrang
 	takeBack := func(cause error) (WriteArrangementOutput, error) {
 		if wasEmpty {
 			for _, track := range owned {
-				_, _ = c.Query("/live/track/delete_arrangement_clips", int32(track), float32(from), float32(to))
+				_, _ = c.Query("/live/track/delete_arrangement_clips", int32(track), float32(from), float32(clearTo))
 			}
 			return WriteArrangementOutput{}, cause
 		}
@@ -311,7 +339,7 @@ func writeArrangement(c auditionClient, sleep auditionSleeper, input WriteArrang
 		if !input.Overwrite {
 			break
 		}
-		res, err := c.Query("/live/track/delete_arrangement_clips", int32(track), float32(from), float32(to))
+		res, err := c.Query("/live/track/delete_arrangement_clips", int32(track), float32(from), float32(clearTo))
 		if err != nil {
 			return takeBack(fmt.Errorf("clear track %d: %w", track, err))
 		}
@@ -349,12 +377,12 @@ func writeArrangement(c auditionClient, sleep auditionSleeper, input WriteArrang
 	}
 
 	// Believe the Arrangement, not the sends.
-	for track, want := range expected {
-		got, err := queryArrangementClips(c, track, from, to)
+	for _, track := range owned {
+		got, err := queryArrangementClips(c, track, from, clearTo)
 		if err != nil {
 			return takeBack(err)
 		}
-		if problem := compareArrangement(got, want, from, to); problem != "" {
+		if problem := compareArrangement(got, expected[track], from, clearTo); problem != "" {
 			return takeBack(actionable("arrangement_not_as_planned",
 				fmt.Sprintf("track %d does not hold what was planned: %s", track, problem),
 				"Call ableton_get_arrangement to see what is there, then try again."))

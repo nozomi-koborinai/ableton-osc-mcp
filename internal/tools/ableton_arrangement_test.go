@@ -402,3 +402,36 @@ func TestGetArrangementReadsTheSongBack(t *testing.T) {
 		t.Errorf("bars 3-4 of the drums = %+v, want the one hook clip that sits there", narrowed.Tracks)
 	}
 }
+
+// Found on a real Live: a song rewritten shorter left the end of the longer
+// version playing on behind it. The Sections track says how far that version went.
+func TestWriteArrangementRewrittenShorterLeavesNoOldEnding(t *testing.T) {
+	t.Parallel()
+
+	live := newFakeArrangementLive()
+	if _, err := writeArrangement(live, noSleep, WriteArrangementInput{Sections: testSong()}); err != nil {
+		t.Fatal(err)
+	}
+	live.arrangement[0] = append(live.arrangement[0], arrClip{"Another sketch", 400, 408}) // far away, not part of the song
+
+	// Without overwrite, the refusal already counts the old ending among what is in the way.
+	_, err := writeArrangement(live, noSleep, WriteArrangementInput{Sections: testSong()[:1]})
+	var actionableErr *ActionableError
+	if !errors.As(err, &actionableErr) || actionableErr.Code != "arrangement_occupied" || !strings.Contains(actionableErr.Message, "808 A") {
+		t.Fatalf("error = %v; want arrangement_occupied that lists the old version's 808 too", err)
+	}
+
+	got, err := writeArrangement(live, noSleep, WriteArrangementInput{Sections: testSong()[:1], Overwrite: true})
+	if err != nil {
+		t.Fatalf("rewrite: error = %v", err)
+	}
+	if want := []arrClip{{"Drums intro", 0, 4}, {"Drums intro", 4, 8}, {"Another sketch", 400, 408}}; !reflect.DeepEqual(live.clips(0), want) {
+		t.Errorf("drums = %v, want %v", live.clips(0), want)
+	}
+	if len(live.clips(1)) != 0 || !reflect.DeepEqual(live.clips(3), []arrClip{{"Intro", 0, 8}}) {
+		t.Errorf("808 = %v, sections = %v; want nothing left of the longer version", live.clips(1), live.clips(3))
+	}
+	if got.ClipsReplaced != 10 || !got.Verified {
+		t.Errorf("clips_replaced = %d, verified = %v; want the 8 clips and 2 markers of the first version", got.ClipsReplaced, got.Verified)
+	}
+}
