@@ -216,7 +216,22 @@ func TestLiveRecordPassStaysInOneFileAcrossScenes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read the recorded file: %v", err)
 	}
-	t.Logf("recorded %.3f s into %s (engine says %.3f s between record on and off)", total, filepath.Base(got.FilePaths[0]), got.DurationSec)
+	t.Logf("recorded %.3f s into %s (engine says %.3f s)", total, filepath.Base(got.FilePaths[0]), got.DurationSec)
+	if math.Abs(total-got.DurationSec) > 0.01 {
+		t.Errorf("file is %.3f s but the bounce reports %.3f s", total, got.DurationSec)
+	}
+
+	// The pass takes stop buttons off the Bounce track's other rows; afterwards
+	// they must be back, or the kept take would play on through scene launches.
+	buttons, err := client.Query("/live/song/get/track_data", int32(got.TrackIndex), int32(got.TrackIndex+1), "clip_slot.has_stop_button")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for slot, v := range buttons {
+		if on, err := asBoolish(v); err != nil || !on {
+			t.Errorf("Bounce track slot %d has no stop button after the pass (%v)", slot, v)
+		}
+	}
 }
 
 func TestLiveRecordWindowLinesUpWithTheBar(t *testing.T) {

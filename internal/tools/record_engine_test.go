@@ -183,6 +183,10 @@ func (f *fakeRecorder) Query(address string, args ...interface{}) ([]interface{}
 				for _, has := range f.hasClip[t] {
 					out = append(out, has)
 				}
+			case "clip_slot.has_stop_button":
+				for _, has := range f.stopButton[t] {
+					out = append(out, has)
+				}
 			case "track.solo":
 				out = append(out, f.solo[t])
 			case "track.arm":
@@ -312,7 +316,16 @@ func TestRecordPassRecordsInARowThatIsNeverLaunched(t *testing.T) {
 	t.Parallel()
 
 	live := newFakeRecorder()
-	take, err := recordResampledPass(live, live.deps(), recordPlan{TrackName: "Measure",
+	live.stopButton[2] = []bool{true, false, true} // the listener had removed one themselves
+	var duringPass []bool
+	spy := &sendSpy{fakeRecorder: live, on: func(address string, args []interface{}) {
+		if address == "/live/song/set/session_record" {
+			if v, _ := asTestInt(args[0]); v == 1 {
+				duringPass = append([]bool{}, live.stopButton[2]...)
+			}
+		}
+	}}
+	take, err := recordResampledPass(spy, live.deps(), recordPlan{TrackName: "Measure",
 		Spans: []recordSpan{{SceneIndex: scene(0), Bars: 2}, {SceneIndex: scene(1), Bars: 2}}})
 	if err != nil {
 		t.Fatalf("recordResampledPass() error = %v", err)
@@ -323,8 +336,13 @@ func TestRecordPassRecordsInARowThatIsNeverLaunched(t *testing.T) {
 	if len(take.Slots) != 1 || take.Slots[0] != 2 {
 		t.Fatalf("slots = %v, want the take in row 2", take.Slots)
 	}
-	if got := live.stopButton[2]; got[0] || got[1] || !got[2] {
-		t.Errorf("stop buttons on the Measure track = %v, want only row 2 to keep one", got)
+	if len(duringPass) != 3 || duringPass[0] || duringPass[1] || !duringPass[2] {
+		t.Errorf("stop buttons while recording = %v, want only row 2 to have one", duringPass)
+	}
+	// Afterwards the track behaves as it did before: a kept take must stop again
+	// when another scene is launched.
+	if got := live.stopButton[2]; !got[0] || got[1] || !got[2] {
+		t.Errorf("stop buttons after the pass = %v, want them back as they were [true false true]", got)
 	}
 	if len(live.takeBeats) != 1 || live.takeBeats[0] != 16 || live.truncated {
 		t.Errorf("takes = %v truncated = %v, want one whole 16-beat take across both scenes", live.takeBeats, live.truncated)

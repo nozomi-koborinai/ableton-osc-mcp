@@ -166,6 +166,11 @@ func recordResampledPass(c recordClient, deps recordDeps, plan recordPlan) (take
 	if err != nil {
 		return recordedTake{}, err
 	}
+	stopButtons, err := trackStopButtons(c, trackIndex, len(occupied))
+	if err != nil {
+		return recordedTake{}, err
+	}
+	var stopButtonsChanged []int
 
 	armed, recording := false, false
 	defer func() {
@@ -178,6 +183,11 @@ func recordResampledPass(c recordClient, deps recordDeps, plan recordPlan) (take
 		}
 		for _, track := range othersArmed {
 			_ = c.Send("/live/track/set/arm", int32(track), int32(1))
+		}
+		// The track goes back to how scene launches treated it before the pass:
+		// a take that is kept must stop again when another scene is launched.
+		for _, slot := range stopButtonsChanged {
+			_ = c.Send("/live/clip_slot/set/has_stop_button", int32(trackIndex), int32(slot), boolInt32(stopButtons[slot]))
 		}
 		_ = c.Send("/live/song/set/clip_trigger_quantization", int32(prevQuant))
 		if prevSelected >= 0 {
@@ -193,11 +203,10 @@ func recordResampledPass(c recordClient, deps recordDeps, plan recordPlan) (take
 		{"/live/song/set/clip_trigger_quantization", int32(auditionBarQuantization)},
 	}
 	for i := range occupied {
-		keep := int32(0)
-		if i == row {
-			keep = 1
+		if want := i == row; want != stopButtons[i] {
+			stopButtonsChanged = append(stopButtonsChanged, i)
+			setup = append(setup, []interface{}{"/live/clip_slot/set/has_stop_button", int32(trackIndex), int32(i), boolInt32(want)})
 		}
-		setup = append(setup, []interface{}{"/live/clip_slot/set/has_stop_button", int32(trackIndex), int32(i), keep})
 	}
 	for _, track := range othersArmed {
 		setup = append(setup, []interface{}{"/live/track/set/arm", int32(track), int32(0)})
@@ -329,6 +338,33 @@ func recordResampledPass(c recordClient, deps recordDeps, plan recordPlan) (take
 		take.FilePaths = append(take.FilePaths, path)
 	}
 	return take, nil
+}
+
+// trackStopButtons reports, per scene, whether the track's slot has a stop
+// button. Rows Live has not told us about (a scene added a moment ago) count as
+// having one, which is Live's default.
+func trackStopButtons(c recordClient, trackIndex, rows int) ([]bool, error) {
+	res, err := c.Query("/live/song/get/track_data", int32(trackIndex), int32(trackIndex+1), "clip_slot.has_stop_button")
+	if err != nil {
+		return nil, fmt.Errorf("read stop buttons: %w", err)
+	}
+	buttons := make([]bool, rows)
+	for i := range buttons {
+		buttons[i] = true
+		if i < len(res) {
+			if buttons[i], err = asBoolish(res[i]); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return buttons, nil
+}
+
+func boolInt32(b bool) int32 {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // armedTracksExcept lists the armed tracks other than the recording track.
