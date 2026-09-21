@@ -16,6 +16,7 @@ type testBeat struct {
 	high       []int   // steps with a hat
 	chords     [][]int // one chord per bar, cycled
 	chordLevel float64
+	pad        bool // one chord held for the whole track, fading in, instead of a change on every bar
 	sampleRate int
 }
 
@@ -75,13 +76,20 @@ func (b testBeat) render() []float64 {
 		within(b.low, func(at float64) { burst(at, []float64{55, 110}, 0.08, 0.6) })
 		within(b.mid, func(at float64) { burst(at, clap, 0.03, 0.4) })
 		within(b.high, func(at float64) { burst(at, hat, 0.01, 0.2) })
-		if len(b.chords) > 0 {
+		if len(b.chords) > 0 && !b.pad {
 			chord := detunedNotes(b.chords[bar%len(b.chords)], 0, b.sampleRate, 16*b.stepSec())
 			start := int(barStart * sr)
 			for i, v := range chord {
 				if start+i < len(out) {
 					out[start+i] += v * b.chordLevel / 0.1
 				}
+			}
+		}
+	}
+	if b.pad {
+		for i, v := range detunedNotes(b.chords[0], 0, b.sampleRate, total-b.offsetSec) {
+			if at := int(b.offsetSec*sr) + i; at < len(out) {
+				out[at] += v * math.Min(1, float64(i)/(2*sr)) * b.chordLevel / 0.1 // fading in over two seconds
 			}
 		}
 	}

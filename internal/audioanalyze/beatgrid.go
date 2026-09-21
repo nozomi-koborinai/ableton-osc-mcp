@@ -10,6 +10,7 @@ const (
 	beatTempoSearch = 0.015
 	beatTempoStep   = 0.02 // BPM
 	beatGridMinBars = 2
+	lowOnsetSpanSec = 0.05
 	beatsPerBar     = 4 // 4/4 is assumed throughout
 )
 
@@ -81,6 +82,75 @@ func bandFluxes(samples []float64, sampleRate int, bands ...[2]float64) [][]floa
 	return out
 }
 
+// lowOnsetEnvelope is the onset envelope of the low end, on the same frames as
+// bandFluxes. A spectrum cannot do this: a frame short enough to time a kick is
+// shorter than a cycle of an 808, and its low bins swell and shrink with every
+// swing of the wave. So the band is cut out in the time domain and rectified,
+// and each moment is asked how much louder the 50 ms after it are than the
+// 50 ms before it.
+func lowOnsetEnvelope(samples []float64, sampleRate int) []float64 {
+	frames := 0
+	if len(samples) >= fluxFrameSize {
+		frames = (len(samples)-fluxFrameSize)/fluxHopSize + 1
+	}
+	out := make([]float64, frames)
+	if frames == 0 {
+		return out
+	}
+	band := highPassBiquad(fluxBandLow[0], sampleRate).apply(samples)
+	lowPass := lowPassBiquad(fluxBandLow[1], sampleRate)
+	band = lowPass.apply(lowPass.apply(band))
+	sums := make([]float64, len(band)+1) // running sum of the rectified band
+	for i, v := range band {
+		sums[i+1] = sums[i] + math.Abs(v)
+	}
+	span := int(lowOnsetSpanSec * float64(sampleRate))
+	for f := range out {
+		centre := f*fluxHopSize + fluxFrameSize/2
+		if centre-span < 0 || centre+span > len(band) {
+			continue
+		}
+		if rise := (sums[centre+span] - 2*sums[centre] + sums[centre-span]) / float64(span); rise > 0 {
+			out[f] = rise
+		}
+	}
+	return out
+}
+
+// Second-order Butterworth sections (RBJ cookbook, Q = 1/sqrt 2).
+func lowPassBiquad(cutoffHz float64, sampleRate int) biquad {
+	w := 2 * math.Pi * cutoffHz / float64(sampleRate)
+	alpha, cos := math.Sin(w)/math.Sqrt2, math.Cos(w)
+	a0 := 1 + alpha
+	return biquad{b0: (1 - cos) / 2 / a0, b1: (1 - cos) / a0, b2: (1 - cos) / 2 / a0, a1: -2 * cos / a0, a2: (1 - alpha) / a0}
+}
+
+func highPassBiquad(cutoffHz float64, sampleRate int) biquad {
+	w := 2 * math.Pi * cutoffHz / float64(sampleRate)
+	alpha, cos := math.Sin(w)/math.Sqrt2, math.Cos(w)
+	a0 := 1 + alpha
+	return biquad{b0: (1 + cos) / 2 / a0, b1: -(1 + cos) / a0, b2: (1 + cos) / 2 / a0, a1: -2 * cos / a0, a2: (1 - alpha) / a0}
+}
+
+// onsetEnvelopes are the three lanes everything rhythmic is read from, each
+// scaled to its own strongest onset.
+func onsetEnvelopes(samples []float64, sampleRate int) (low, mid, high []float64) {
+	fluxes := bandFluxes(samples, sampleRate, fluxBandMid, fluxBandHigh)
+	low, mid, high = lowOnsetEnvelope(samples, sampleRate), fluxes[0], fluxes[1]
+	for _, envelope := range [][]float64{low, mid, high} {
+		strongest := 0.0
+		for _, v := range envelope {
+			strongest = math.Max(strongest, v)
+		}
+		for i := range envelope {
+			if strongest > 0 {
+				envelope[i] /= strongest
+			}
+		}
+	}
+	return low, mid, high
+}
+
 // envelopeAt reads an envelope at a time in seconds, taking the largest of the
 // frames next to it: an onset rarely falls on a frame. A frame speaks for its
 // centre: that is where an onset makes the spectrum grow fastest.
@@ -105,13 +175,12 @@ func buildBeatGrid(samples []float64, sampleRate int, opts beatGridOptions) (Bea
 		return BeatGrid{}, false
 	}
 	hopSec := float64(fluxHopSize) / float64(sampleRate)
-	fluxes := bandFluxes(samples, sampleRate, fluxBandLow, fluxBandMid)
-	low := fluxes[0]
+	low, mid, _ := onsetEnvelopes(samples, sampleRate)
 	// Kicks and snares sit on the beats; hats fill the gaps evenly and would pull
 	// the grid on to the off-beats as easily as on to the beats.
 	pulse := make([]float64, len(low))
 	for i := range pulse {
-		pulse[i] = low[i] + fluxes[1][i]
+		pulse[i] = low[i] + mid[i]
 	}
 
 	grid := BeatGrid{BPM: opts.BPM}
