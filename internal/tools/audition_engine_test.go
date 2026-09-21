@@ -301,7 +301,6 @@ func TestAuditionCommitWritesTheChoiceInWithoutPlayingOrRestoring(t *testing.T) 
 	if err != nil {
 		t.Fatalf("runAudition() error = %v", err)
 	}
-	live.advance(8) // let the pending launch land
 	if live.playing[0] != 1 || fakeFaderDisplay(live.mixer.volumes[1]) != "-16.0 dB" {
 		t.Errorf("after commit: clip %d, chords %s; want B left in place", live.playing[0], fakeFaderDisplay(live.mixer.volumes[1]))
 	}
@@ -396,7 +395,8 @@ func TestAuditionPutsLiveBackWhenAStepFails(t *testing.T) {
 	if !errors.As(err, &actionableErr) || actionableErr.Code != "audition_failed" || !strings.Contains(actionableErr.Message, "variant C") {
 		t.Fatalf("error = %v, want audition_failed naming variant C", err)
 	}
-	live.advance(8)
+	// No waiting here: "back where they were" has to be true the moment the tool
+	// returns, or the next audition would take the variant's clip for the baseline.
 	if live.playing[0] != 0 || !live.devices[[2]int{1, 0}] {
 		t.Errorf("after the failure: clip %d, device %v; want the baseline back", live.playing[0], live.devices[[2]int{1, 0}])
 	}

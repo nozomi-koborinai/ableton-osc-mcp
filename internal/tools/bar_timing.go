@@ -210,9 +210,5 @@ func ceilBarBeat(songTime float64, beatsPerBar int) float64 {
 	if bpb <= 0 {
 		return songTime
 	}
-	barStart := math.Floor(songTime/bpb+auditionSongTimeEpsilon) * bpb
-	if songTime-barStart <= auditionSongTimeEpsilon {
-		return barStart + bpb
-	}
-	return barStart + bpb
+	return (math.Floor(songTime/bpb+auditionSongTimeEpsilon) + 1) * bpb
 }

@@ -247,7 +247,11 @@ func (r *auditionRun) switchTo(next auditionState, line float64) error {
 	return nil
 }
 
-// putBack restores the baseline at once, from wherever a failure left things.
+// putBack restores the baseline from wherever a failure left things, and only
+// returns once that is true. Faders and devices come back at once. A clip
+// launch or stop lands on a bar line, so while playback runs it waits for the
+// line they are sure to have landed on: the caller is told "everything is
+// back", and the next audition reads its baseline from what is playing.
 func (r *auditionRun) putBack() {
 	states := []auditionState{r.current}
 	if r.pending != nil {
@@ -255,14 +259,31 @@ func (r *auditionRun) putBack() {
 	}
 	playing, err := queryAuditionIsPlaying(r.client)
 	stopped := err == nil && !playing
-	launched := false
+
+	// Worked out before anything is sent: a launch sent closer to the line than
+	// the lead may land on it or a bar later, so the later one is waited for.
+	landed := math.NaN()
+	if err == nil && playing {
+		if now, err := queryCurrentSongTime(r.client); err == nil {
+			landed = ceilBarBeat(now, r.beatsPerBar)
+			if landed-now < barLeadBeats(r.tempo, r.beatsPerBar) {
+				landed += float64(r.beatsPerBar)
+			}
+		}
+	}
+
+	launched, quantized := false, false
 	for _, cmd := range restoreCommands(r.baseline, states...) {
 		_ = r.client.Send(cmd.address, cmd.args...)
 		launched = launched || cmd.address == "/live/clip_slot/fire"
+		quantized = quantized || cmd.quantized
 	}
-	if stopped && launched {
+	switch {
+	case stopped && launched:
 		// Launching a clip starts a stopped transport. Whoever stopped it wants it stopped.
 		_ = r.client.Send("/live/song/stop_playing")
+	case quantized && !math.IsNaN(landed):
+		_ = waitUntilSongTime(r.client, r.sleep, landed, r.tempo)
 	}
 	r.current, r.pending = r.baseline, nil
 }
