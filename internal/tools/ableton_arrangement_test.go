@@ -436,32 +436,63 @@ func TestWriteArrangementRewrittenShorterLeavesNoOldEnding(t *testing.T) {
 	}
 }
 
-// The same trap by another road: the song is written again from a later bar, so
-// a marker of the old version lies across the new start. How far the old
-// version went has to be followed through that marker, not given up at it.
-func TestWriteArrangementRewrittenFromALaterBarLeavesNoOldEnding(t *testing.T) {
+// Live 11 cannot cut an Arrangement clip, and deleting takes the whole clip. A
+// clip that lies across the first or the last bar line of the song can therefore
+// be neither kept nor removed: what the new copies do not cover would play on.
+// That is refused before anything is touched, overwrite or not.
+func TestWriteArrangementRefusesAClipThatLiesAcrossItsEdges(t *testing.T) {
 	t.Parallel()
 
-	live := newFakeArrangementLive()
-	if _, err := writeArrangement(live, noSleep, WriteArrangementInput{Sections: testSong()}); err != nil {
-		t.Fatal(err)
+	for name, tc := range map[string]struct {
+		before   func(*fakeArrangementLive)
+		input    WriteArrangementInput
+		mentions string
+	}{
+		// Reported on the pull request: an eight-bar hook written from bar 1, the song rewritten from bar 2.
+		"an old long clip across the new start": {
+			before: func(live *fakeArrangementLive) {
+				live.lengths[[2]int{1, 0}] = 32
+				if _, err := writeArrangement(live, noSleep, WriteArrangementInput{Sections: []SongSection{{SceneIndex: 0, Bars: 8}}}); err != nil {
+					t.Fatal(err)
+				}
+			},
+			input:    WriteArrangementInput{Sections: []SongSection{{SceneIndex: 1, Bars: 1}}, StartBar: 2, Overwrite: true},
+			mentions: "808 A",
+		},
+		"a clip that runs out over the end": {
+			before:   func(live *fakeArrangementLive) { live.arrangement[0] = []arrClip{{"long take", 36, 48}} },
+			input:    WriteArrangementInput{Sections: testSong(), Overwrite: true},
+			mentions: "long take",
+		},
+	} {
+		live := newFakeArrangementLive()
+		tc.before(live)
+		snapshot := fmt.Sprint(live.arrangement)
+		live.sent = nil
+
+		_, err := writeArrangement(live, noSleep, tc.input)
+		var actionableErr *ActionableError
+		if !errors.As(err, &actionableErr) || actionableErr.Code != "arrangement_clip_crosses_range" || !strings.Contains(actionableErr.Message, tc.mentions) {
+			t.Errorf("%s: error = %v, want arrangement_clip_crosses_range naming %q", name, err, tc.mentions)
+		}
+		if len(live.sent) != 0 || fmt.Sprint(live.arrangement) != snapshot {
+			t.Errorf("%s: Live was touched: %v", name, live.sent)
+		}
 	}
-	// One bar of Intro from bar 2: beat 4, in the middle of the old Intro marker (beats 0-8).
-	got, err := writeArrangement(live, noSleep, WriteArrangementInput{Sections: []SongSection{{SceneIndex: 1, Bars: 1}}, StartBar: 2, Overwrite: true})
-	if err != nil {
-		t.Fatalf("rewrite: error = %v", err)
+}
+
+// What is read back has to be the plan and nothing else: a leftover piece of an
+// older clip inside the song's stretch must not pass as verified.
+func TestWriteArrangementVerifiesThatNothingElseIsLeftInItsStretch(t *testing.T) {
+	t.Parallel()
+
+	got := compareArrangement(
+		[]arrangementClip{{Name: "Drums A", Start: 0, End: 8}, {Name: "left over", Start: 8, End: 12}},
+		[]arrangementClip{{Start: 0, End: 8}})
+	if got == "" {
+		t.Error("a clip that is not in the plan went unnoticed")
 	}
-	// Bar 1 of the old version lies before the new start and stays. Nothing after the new song does.
-	if want := []arrClip{{"Drums intro", 0, 4}, {"Drums intro", 4, 8}}; !reflect.DeepEqual(live.clips(0), want) {
-		t.Errorf("drums = %v, want %v", live.clips(0), want)
-	}
-	if len(live.clips(1)) != 0 {
-		t.Errorf("808 = %v; the old hook should be gone", live.clips(1))
-	}
-	if want := []arrClip{{"Intro", 0, 4}, {"Intro", 4, 8}}; !reflect.DeepEqual(live.clips(3), want) {
-		t.Errorf("sections = %v, want the old marker cut at the new start and the new one after it: %v", live.clips(3), want)
-	}
-	if !got.Verified {
-		t.Error("verified = false")
+	if got := compareArrangement([]arrangementClip{{Name: "Drums A", Start: 0, End: 8}}, []arrangementClip{{Start: 0, End: 8}}); got != "" {
+		t.Errorf("the plan itself is reported as a problem: %s", got)
 	}
 }

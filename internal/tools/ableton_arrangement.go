@@ -88,7 +88,7 @@ type GetArrangementOutput struct {
 
 func NewAbletonWriteArrangement(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
 	return genkit.DefineTool(g, "ableton_write_arrangement",
-		"Ableton Live: lay a song out in the Arrangement from `sections` (each a scene for so many bars): every clip of a section's scene is copied end to end until the section is full, and a MIDI track named 'Sections', added at the end of the set if missing, gets one empty clip per section with the section's name, so the shape of the song shows on the timeline. Playback is not stopped and the playhead is not moved. Refuses when Arrangement clips are in the way, on any track that holds Session clips or on the Sections track (an earlier version of the song may have used other tracks than this one); overwrite=true deletes those first, for good, so pass it only after the person has agreed. A track without Session clips (a recorded vocal) is never touched. Reads the Arrangement back and reports whether it holds what was planned. A track that is playing a Session clip keeps playing that until Back to Arrangement is pressed in Live. The bounce (ableton_bounce_session_pass) records from the scenes, not from this: edits made on the timeline by hand are not in it.",
+		"Ableton Live: lay a song out in the Arrangement from `sections` (each a scene for so many bars): every clip of a section's scene is copied end to end until the section is full, and a MIDI track named 'Sections', added at the end of the set if missing, gets one empty clip per section with the section's name, so the shape of the song shows on the timeline. Playback is not stopped and the playhead is not moved. Refuses when Arrangement clips are in the way, on any track that holds Session clips or on the Sections track (an earlier version of the song may have used other tracks than this one); overwrite=true deletes those first, for good, so pass it only after the person has agreed. It deletes whole clips only: a clip that lies across the first or the last bar line of the song is refused either way, because Live 11 cannot cut one. A track without Session clips (a recorded vocal) is never touched. Reads the Arrangement back and reports whether it holds what was planned. A track that is playing a Session clip keeps playing that until Back to Arrangement is pressed in Live. The bounce (ableton_bounce_session_pass) records from the scenes, not from this: edits made on the timeline by hand are not in it.",
 		func(_ *ai.ToolContext, input WriteArrangementInput) (WriteArrangementOutput, error) {
 			return writeArrangement(client, time.Sleep, input)
 		},
@@ -298,7 +298,7 @@ func writeArrangement(c auditionClient, sleep auditionSleeper, input WriteArrang
 		clearTo = math.Max(to, reach)
 	}
 
-	var inTheWay []string
+	var inTheWay, crossing []string
 	blocked := 0
 	for _, track := range owned {
 		clips, err := queryArrangementClips(c, track, from, clearTo)
@@ -306,6 +306,11 @@ func writeArrangement(c auditionClient, sleep auditionSleeper, input WriteArrang
 			return WriteArrangementOutput{}, err
 		}
 		blocked += len(clips)
+		for _, clip := range clips {
+			if clip.Start < from-arrangementBeatSlack || clip.End > clearTo+arrangementBeatSlack {
+				crossing = append(crossing, fmt.Sprintf("%q on track %d (%s), bars %s-%s", clip.Name, track, trackNames[track], trimFloat(clip.Start/bar+1), trimFloat(clip.End/bar)))
+			}
+		}
 		for _, span := range foldArrangementClips(clips, bar) { // copies in a row read as one entry
 			copies := max(span.Repeats, 1)
 			entry := fmt.Sprintf("%q on track %d (%s), bars %s-%s", span.Name, track, trackNames[track],
@@ -315,6 +320,15 @@ func writeArrangement(c auditionClient, sleep auditionSleeper, input WriteArrang
 			}
 			inTheWay = append(inTheWay, entry)
 		}
+	}
+	if len(crossing) > 0 {
+		// Live 11 cannot cut an Arrangement clip, and deleting takes the whole clip.
+		// One that lies across the song's first or last bar line can be neither kept
+		// nor removed: whatever the new copies left uncovered would play on.
+		return WriteArrangementOutput{}, actionable("arrangement_clip_crosses_range",
+			fmt.Sprintf("the song would run from bar %s to bar %s, and these clips lie across one of those bar lines: %s",
+				trimFloat(from/bar+1), trimFloat(clearTo/bar), strings.Join(crossing, "; ")),
+			"Start the song where such a clip starts (start_bar) or after it ends, or have the person remove or split that clip in Live. overwrite cannot help: it deletes whole clips only. Nothing in Live was touched.")
 	}
 	if len(inTheWay) > 0 && !input.Overwrite {
 		shown := inTheWay
@@ -384,7 +398,7 @@ func writeArrangement(c auditionClient, sleep auditionSleeper, input WriteArrang
 		if err != nil {
 			return takeBack(err)
 		}
-		if problem := compareArrangement(got, expected[track], from, clearTo); problem != "" {
+		if problem := compareArrangement(got, expected[track]); problem != "" {
 			return takeBack(actionable("arrangement_not_as_planned",
 				fmt.Sprintf("track %d does not hold what was planned: %s", track, problem),
 				"Call ableton_get_arrangement to see what is there, then try again."))
@@ -395,25 +409,20 @@ func writeArrangement(c auditionClient, sleep auditionSleeper, input WriteArrang
 	return out, nil
 }
 
-// compareArrangement checks the clips read back against the plan. Clips that
-// reach into the range from outside it were there before and do not count.
-func compareArrangement(got, want []arrangementClip, from, to float64) string {
-	var inside []arrangementClip
-	for _, clip := range got {
-		if clip.Start >= from-arrangementBeatSlack && clip.End <= to+arrangementBeatSlack {
-			inside = append(inside, clip)
-		}
-	}
-	if len(inside) != len(want) {
-		return fmt.Sprintf("%d clips in the range, %d planned", len(inside), len(want))
+// compareArrangement checks what was read back from the song's stretch against
+// the plan. It has to be the plan and nothing else: no clip of an older version
+// may be left in there.
+func compareArrangement(got, want []arrangementClip) string {
+	if len(got) != len(want) {
+		return fmt.Sprintf("%d clips in the song's stretch, %d planned", len(got), len(want))
 	}
 	sort.Slice(want, func(i, j int) bool { return want[i].Start < want[j].Start })
 	for i := range want {
-		if math.Abs(inside[i].Start-want[i].Start) > arrangementBeatSlack || math.Abs(inside[i].End-want[i].End) > arrangementBeatSlack {
-			return fmt.Sprintf("clip %d runs from beat %v to %v, planned %v to %v", i, inside[i].Start, inside[i].End, want[i].Start, want[i].End)
+		if math.Abs(got[i].Start-want[i].Start) > arrangementBeatSlack || math.Abs(got[i].End-want[i].End) > arrangementBeatSlack {
+			return fmt.Sprintf("clip %d runs from beat %v to %v, planned %v to %v", i, got[i].Start, got[i].End, want[i].Start, want[i].End)
 		}
-		if want[i].Name != "" && inside[i].Name != want[i].Name {
-			return fmt.Sprintf("clip %d is named %q, planned %q", i, inside[i].Name, want[i].Name)
+		if want[i].Name != "" && got[i].Name != want[i].Name {
+			return fmt.Sprintf("clip %d is named %q, planned %q", i, got[i].Name, want[i].Name)
 		}
 	}
 	return ""

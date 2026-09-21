@@ -361,8 +361,10 @@ is stored here, where it could drift away from what is in the Live set.
    clip of a section's scene copied end to end, and a `Sections` track with one
    named, empty clip per section (Live 11 can set a locator but not name one).
    Nothing stops and the playhead stays put. What is in the way is listed and
-   refused unless `overwrite` is set; a track without Session clips, such as a
-   recorded vocal, is never touched. `ableton_get_arrangement` reads it all back
+   refused unless `overwrite` is set; `overwrite` deletes whole clips only, so a
+   clip that lies across the song's first or last bar line is refused either way
+   (Live 11 cannot cut one). A track without Session clips, such as a recorded
+   vocal, is never touched. `ableton_get_arrangement` reads it all back
    in bars, also in a later session.
 
 The bounce records from the scenes, not from the Arrangement: edits made on the
