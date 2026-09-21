@@ -39,6 +39,7 @@ type fakeRecorder struct {
 	filePath      string
 	sendErr       map[string]error
 
+	sceneNames   []string     // nil: every scene is unnamed
 	stopAt       float64      // the listener stops the transport at this beat (0: never)
 	userArmed    map[int]bool // tracks the listener has armed (not the recording track)
 	strayTakes   int          // recordings Live started on the listener's armed tracks
@@ -186,6 +187,17 @@ func (f *fakeRecorder) Query(address string, args ...interface{}) ([]interface{}
 		return []interface{}{int32(f.recStatus)}, nil
 	case "/live/song/get/num_scenes":
 		return []interface{}{int32(len(f.hasClip[0]))}, nil
+	case "/live/song/get/num_tracks":
+		return []interface{}{int32(len(f.trackNames))}, nil
+	case "/live/song/get/scenes/name":
+		names := make([]interface{}, len(f.hasClip[0]))
+		for i := range names {
+			names[i] = ""
+			if i < len(f.sceneNames) {
+				names[i] = f.sceneNames[i]
+			}
+		}
+		return names, nil
 	case "/live/view/get/selected_scene":
 		return []interface{}{int32(f.selectedScene)}, nil
 	case "/live/track/get/arm":
@@ -664,4 +676,65 @@ func TestRecordPassDoesNotRelaunchAfterTheListenerStopped(t *testing.T) {
 	if launches != 1 || live.isPlaying {
 		t.Errorf("scene launches = %d, playing = %v; want only the first scene launched and playback left stopped", launches, live.isPlaying)
 	}
+}
+
+// A song does not end on its last bar line: what was playing rings out. The
+// tail span stops every track but the one that is recording, and keeps recording.
+func TestRecordPassLetsTheSongRingOut(t *testing.T) {
+	t.Parallel()
+
+	live := newFakeRecorder()
+	spy := &sendTimeSpy{fakeRecorder: live, address: "/live/track/stop_all_clips"}
+	take, err := recordResampledPass(spy, live.deps(), recordPlan{
+		TrackName: "Measure",
+		Spans:     []recordSpan{{SceneIndex: scene(0), Bars: 2}, {StopClips: true, Bars: 1}},
+	})
+	if err != nil {
+		t.Fatalf("recordResampledPass() error = %v", err)
+	}
+	// From beat 1.5 the window opens on beat 4; the song is two bars, the tail one.
+	if take.WindowBeats != 12 || len(live.takeBeats) != 1 || live.takeBeats[0] != 12 {
+		t.Errorf("window = %v beats, takes = %v; want one take of 12 beats", take.WindowBeats, live.takeBeats)
+	}
+	var stopped []int
+	for _, call := range live.calls {
+		if call.address == "/live/track/stop_all_clips" {
+			track, _ := asTestInt(call.args[0])
+			stopped = append(stopped, track)
+		}
+	}
+	// Drums and Bass are told to stop. Measure is recording: stopping it would end the take.
+	if len(stopped) != 2 || stopped[0] != 0 || stopped[1] != 1 {
+		t.Errorf("tracks told to stop = %v, want [0 1] and never the recording track %d", stopped, take.TrackIndex)
+	}
+	// A stop is quantized like a launch: it goes out ahead of the boundary at beat 12.
+	if len(spy.times) == 0 || spy.times[0] > 12-commandLatencyBeats || spy.times[0] < 10 {
+		t.Errorf("stops sent at beats %v, want early enough to land on beat 12", spy.times)
+	}
+}
+
+func TestRecordPassRejectsATailWithNothingBeforeIt(t *testing.T) {
+	t.Parallel()
+
+	live := newFakeRecorder()
+	if _, err := recordResampledPass(live, live.deps(), recordPlan{TrackName: "Measure", Spans: []recordSpan{{StopClips: true, Bars: 1}}}); err == nil {
+		t.Fatal("a pass that starts by stopping everything has nothing to record")
+	}
+	if len(live.calls) != 0 {
+		t.Errorf("Live was touched: %v", live.addresses())
+	}
+}
+
+// sendTimeSpy notes the song time of every send to one address.
+type sendTimeSpy struct {
+	*fakeRecorder
+	address string
+	times   []float64
+}
+
+func (s *sendTimeSpy) Send(address string, args ...interface{}) error {
+	if address == s.address {
+		s.times = append(s.times, s.songTime)
+	}
+	return s.fakeRecorder.Send(address, args...)
 }

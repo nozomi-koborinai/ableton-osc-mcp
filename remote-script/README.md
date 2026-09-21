@@ -28,6 +28,8 @@ Developed and smoke-tested against **Ableton Live 11.0.12** (API label `11.0`). 
 | `/live/clip/envelope/clear` | `track`, `clip`, `device_index`, `param_index` | Clear one envelope |
 | `/live/clip/envelope/clear_all` | `track`, `clip` | Clear all envelopes on the clip |
 | `/live/song/get/return_tracks` | — | `(count, *names)` for return tracks (send indices) |
+| `/live/track/get/arrangement_clips` | `track_index`, `from_beat`, `to_beat` (optional; negative = open) | Arrangement clips that overlap the range: `(track, count, name, start, end, ...)` in time order |
+| `/live/track/delete_arrangement_clips` | `track_index`, `from_beat`, `to_beat` | Delete the Arrangement clips wholly inside the range (a clip that sticks out stays whole): `(track, "ok", deleted, still_touching)` |
 | `/live/track/get/volume_db` | `track_index` | Track volume as Live displays it: `(track, "-6.0 dB", raw)` |
 | `/live/track/get/volume_for_db` | `track_index`, `db` | Raw fader value for a dB target (binary search over `str_for_value`; changes nothing): `(track, raw, display_at_raw, "ok"\|"out_of_range")` |
 | `/live/track/get/send_db` / `send_for_db` | `track_index`, `send_index` [, `db`] | The same two for a send |

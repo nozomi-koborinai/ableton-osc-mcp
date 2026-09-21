@@ -75,6 +75,7 @@ func Register(g *genkit.Genkit, deps Deps) []ai.Tool {
 		NewAbletonClearClipEnvelope(g, c),
 		NewAbletonMatchClipTempo(g, c),
 		NewAbletonAnalyzeLocalAudio(g, deps.ReferenceStore),
+		NewAbletonFinalizeAudio(g),
 		NewAbletonAnalyzeAudioURL(g, deps.ReferenceStore),
 		NewAbletonListReferenceProfiles(g, deps.ReferenceStore),
 		NewAbletonChopDraft(g),
@@ -129,6 +130,8 @@ func Register(g *genkit.Genkit, deps Deps) []ai.Tool {
 		NewAbletonGetSessionRecord(g, c),
 		NewAbletonSetSessionRecord(g, c),
 		NewAbletonBounceSessionPass(g, c),
+		NewAbletonWriteArrangement(g, c),
+		NewAbletonGetArrangement(g, c),
 		NewAbletonMeasureMix(g, c, deps.ReferenceStore),
 
 		// Recipes

@@ -27,6 +27,9 @@ This enables AI assistants (Claude, Cursor, etc.) to interact with Ableton Live 
 - Match an audio clip to the project tempo with Warp (e.g. after loading a sample)
 - Analyze a local `.wav`/`.aif`, or reference-analyze an `http(s)`/YouTube URL, for duration, levels, BPM/key alternatives, chords, section map, rhythm density, rms_per_beat, band balance, match axes, texture, and a mix profile (integrated LUFS, true peak, crest, 9-band spectrum, per-band stereo width) (URL streams in memory and is never saved; no melody extraction)
 - Save a track's mix profile as a named reference (numbers only, never audio) and compare your own bounce against a weighted blend of references
+- Bounce a whole song in one pass — sections of different lengths, then a tail in which everything rings out — without an export dialog (`ableton_bounce_session_pass` with `sections`)
+- Lay the same sections out in the Arrangement, with a `Sections` track that names them, and read the Arrangement back in bars (`ableton_write_arrangement`, `ableton_get_arrangement`)
+- Turn a bounce into a delivery file — 44.1 kHz / 24-bit WAV under a true-peak ceiling, with gain only — and get it checked: clipped source, cut-off ending, true peak (`ableton_finalize_audio`, works without Live)
 - Measure what Live is putting out — LUFS, true peak, crest, 9 bands, stereo width — from a Resampling pass, against saved references and per track group (`ableton_measure_mix`); no export dialog, no screen automation
 - Autogain tracks toward a target meter level while audio is playing
 - Diagnose AbletonOSC connection and browser/master patch readiness
@@ -51,6 +54,7 @@ This repo ships a small Remote Script patch under [`remote-script/`](remote-scri
 - `/live/song/get/return_tracks` (list return tracks for send indices)
 - `/live/device/get|set/input_routing_type|channel` (+ available lists) for Compressor sidechain
 - `/live/clip/envelope/get|set_steps|clear|clear_all` (+ `/live/clip/get/has_envelopes`) for Session clip automation
+- `/live/track/get/arrangement_clips` · `/live/track/delete_arrangement_clips` (read the Arrangement; delete the clips wholly inside a range)
 - `/live/track/get/volume_db` · `volume_for_db` · `send_db` · `send_for_db`, `/live/song/get/track_volumes_db`, `/live/master/get/volume_db` · `volume_for_db` (mixer levels as Live displays them in dB, and the raw value for a dB target)
 
 Install steps: see [remote-script/README.md](remote-script/README.md).
@@ -326,6 +330,48 @@ a one-call recipe on the same engine:
 | Compare anything that already exists: clips, levels, devices, 2 to 8 ways | `ableton_audition` |
 | Keep a set of fader positions to come back to later | `ableton_capture_mix_snapshot` → … → `ableton_restore_mix_snapshot` |
 
+## From loops to a delivered song
+
+A song is a list of sections: a scene, for so many bars, under a name. The same
+list drives three tools, and it is passed in whole every time — nothing about it
+is stored here, where it could drift away from what is in the Live set.
+
+```jsonc
+"sections": [
+  { "scene_index": 2, "bars": 4,  "name": "Intro" },
+  { "scene_index": 0, "bars": 8,  "name": "Hook 1" },
+  { "scene_index": 1, "bars": 16, "name": "Verse" },
+  { "scene_index": 0, "bars": 8,  "name": "Hook 2" }
+]
+```
+
+1. `ableton_bounce_session_pass` with `sections` records the song in one pass:
+   each scene is launched on its bar line, and after the last section every
+   track is stopped while the recording runs on for `tail_bars` (2 by default),
+   so reverb and delay ring out instead of being cut on the bar line. It runs in
+   real time and returns the file Live wrote plus where each section starts in it.
+2. `ableton_finalize_audio` turns that file into something to hand in: the
+   silence after the last sound cut, DC out, a fade-out, 44.1 kHz / 24-bit WAV
+   (or 48 kHz, or 16 bit), the level set against a true-peak ceiling of -1 dBTP
+   with gain alone. No limiting: loudness is made on Live's master. The source is
+   never touched. It measures the *written file* and reports what speaks against
+   delivering it — a clipped source, an ending that is cut off (record more
+   tail), a true peak over the ceiling give `ok: false`.
+3. `ableton_write_arrangement` lays the same sections out on the timeline: every
+   clip of a section's scene copied end to end, and a `Sections` track with one
+   named, empty clip per section (Live 11 can set a locator but not name one).
+   Nothing stops and the playhead stays put. What is in the way is listed and
+   refused unless `overwrite` is set; `overwrite` deletes whole clips only, so a
+   clip that lies across the song's first or last bar line is refused either way
+   (Live 11 cannot cut one). A track without Session clips, such as a recorded
+   vocal, is never touched. `ableton_get_arrangement` reads it all back
+   in bars, also in a later session.
+
+The bounce records from the scenes, not from the Arrangement: edits made on the
+timeline by hand are not in it. A section has to be a whole number of times as
+long as each clip of its scene (a 4-bar clip fits 8 bars, not 6); the refusal
+names the clip.
+
 ## Audio analysis
 
 Two entry points estimate duration, peak/RMS level, onset density, BPM, and an
@@ -435,6 +481,7 @@ sharing a position, so a block-chord sketch is a few lines of text.
 | `ableton_match_clip_tempo` | Enable Warp on an audio clip so it follows the project tempo (`beats` or `complex`) |
 | `ableton_analyze_local_audio` | Analyze a local `.wav`/`.aif` (BPM/key alternatives, density, rms_per_beat, band_balance, match_axes, sections, onset grid, texture, mix_profile). Optional window, `references` to compare against saved profiles, `save_reference_as` to keep the numbers. Rejects URLs; no melody/note extraction |
 | `ableton_analyze_audio_url` | Reference-analyze an `http(s)`/YouTube URL (same production fields and mix_profile as local, minus the full onset list). Optional window and `save_reference_as`. Streams via yt-dlp+ffmpeg in memory; requires yt-dlp+ffmpeg |
+| `ableton_finalize_audio` | Turn a recording (.wav/.aif) into a delivery WAV: tail trimmed, DC out, fade-out, 44.1/48 kHz, 24/16 bit, level set against a true-peak ceiling with gain only; never touches the source; reports what the written file measures and what speaks against handing it in |
 | `ableton_list_reference_profiles` | List saved reference mix profiles (name, source, LUFS, crest, 9 bands) |
 | `ableton_audition` | Play 2–8 labelled variants back to back on bar lines (clips, track volume deltas in dB, devices on/off), show which one is sounding on an `Audition` track, put everything back; `commit` writes the chosen one in (real time) |
 | `ableton_record_audition_choice` | Keep what the listener chose in an audition, with every option they heard and their own words |
@@ -492,7 +539,9 @@ sharing a position, so a block-chord sketch is a few lines of text.
 | `ableton_get_master_devices` / `ableton_get_master_device_parameters` / `ableton_set_master_device_parameter` | Master devices (requires master patch) |
 | `ableton_load_on_master` | Load Browser item onto master (requires browser+master patch) |
 | `ableton_get_session_record` / `ableton_set_session_record` | Session Record on/off |
-| `ableton_bounce_session_pass` | Record a scene pass onto a Bounce track via Resampling and return the audio file Live wrote (real time; not a rendered export) |
+| `ableton_bounce_session_pass` | Record a pass of scenes onto a Bounce track via Resampling and return the audio file Live wrote (real time; not a rendered export). `sections` records a whole song, each section for its own number of bars, then `tail_bars` with everything stopped so the ending rings out |
+| `ableton_write_arrangement` | Lay `sections` out in the Arrangement (clips copied end to end, a `Sections` track naming each section), read back and verified; refuses to write over what is there unless `overwrite` (requires patch) |
+| `ableton_get_arrangement` | Read the Arrangement in bars: sections, locators, each track's clips with copies in a row folded into one line (requires patch) |
 | `ableton_measure_mix` | Record N bars of Live's output and measure them (LUFS, true peak, crest, 9 bands, width), optionally against saved reference profiles and per track group; deletes its own clip afterwards (real time) |
 | `ableton_setup_drum_track` | Create MIDI drum track, load kit, fill clip with preset pattern (requires browser patch) |
 | `ableton_osc_send` | Send raw OSC message |
@@ -511,6 +560,8 @@ Once configured, you can ask your AI assistant:
 - "Write three hat patterns into free slots and audition them against what's playing now"
 - "Play me the lead with and without the chorus — then J and K again, back to back"
 - "B it is. Write it in and remember that I picked it"
+- "Bounce the song — intro 4, hook 8, verse 16, hook 8 — and make me a 44.1k/24-bit file to hand in"
+- "Lay that structure out in the Arrangement so I can see it"
 - "Turn the 808 down 2 dB and set the pad to -24 dB"
 - "Humanize the drum clip with a bit of swing"
 - "Warp that audio sample to the project tempo"

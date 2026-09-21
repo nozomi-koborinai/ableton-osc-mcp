@@ -51,3 +51,75 @@ func TestBounceSessionPassKeepsItsDefaults(t *testing.T) {
 		t.Errorf("defaults = %v / %d bars, want [2 1 0 3 0] / 4", got.ScenesFired, got.BarsPerScene)
 	}
 }
+
+func TestBounceSessionPassRecordsASongWithItsTail(t *testing.T) {
+	t.Parallel()
+
+	live := newFakeRecorder()
+	live.trackNames = []string{"Drums", "Bass", "Bounce"}
+	live.sceneNames = []string{"Hook", "Intro", ""}
+	got, err := bounceSessionPass(live, live.deps(), BounceSessionPassInput{
+		Sections: []SongSection{{SceneIndex: 1, Bars: 1}, {SceneIndex: 0, Bars: 2, Name: "Hook 1"}},
+	})
+	if err != nil {
+		t.Fatalf("bounceSessionPass() error = %v", err)
+	}
+	// 1 + 2 bars of song and the default two bars of tail, at 120 BPM in 4/4.
+	if got.DurationSec != 10 || got.TailSec != 4 || got.TempoBPM != 120 {
+		t.Errorf("duration = %v s, tail = %v s, tempo = %v; want 10, 4, 120", got.DurationSec, got.TailSec, got.TempoBPM)
+	}
+	want := []BouncedSection{{Name: "Intro", SceneIndex: 1, Bars: 1, StartSec: 0}, {Name: "Hook 1", SceneIndex: 0, Bars: 2, StartSec: 2}}
+	if len(got.Sections) != 2 || got.Sections[0] != want[0] || got.Sections[1] != want[1] {
+		t.Errorf("sections = %+v, want %+v", got.Sections, want)
+	}
+	if len(got.ScenesFired) != 2 || got.ScenesFired[0] != 1 || got.ScenesFired[1] != 0 {
+		t.Errorf("scenes_fired = %v, want [1 0]", got.ScenesFired)
+	}
+	if countCalls(live, "/live/track/stop_all_clips") != 2 {
+		t.Errorf("the tail should stop Drums and Bass: %v", live.addresses())
+	}
+}
+
+func TestBounceSessionPassTailIsOptional(t *testing.T) {
+	t.Parallel()
+
+	zero := 0
+	live := newFakeRecorder()
+	live.trackNames = []string{"Drums", "Bass", "Bounce"}
+	got, err := bounceSessionPass(live, live.deps(), BounceSessionPassInput{Sections: []SongSection{{SceneIndex: 0, Bars: 2}}, TailBars: &zero})
+	if err != nil {
+		t.Fatalf("bounceSessionPass() error = %v", err)
+	}
+	if got.DurationSec != 4 || got.TailSec != 0 || countCalls(live, "/live/track/stop_all_clips") != 0 {
+		t.Errorf("duration = %v, tail = %v; want the two bars and nothing more", got.DurationSec, got.TailSec)
+	}
+
+	// The old form keeps its old length: no tail unless asked for.
+	live = newFakeRecorder()
+	live.trackNames = []string{"Drums", "Bass", "Bounce"}
+	got, err = bounceSessionPass(live, live.deps(), BounceSessionPassInput{SceneIndices: []int{0}, BarsPerScene: 2})
+	if err != nil || got.DurationSec != 4 || got.TailSec != 0 {
+		t.Errorf("scene_indices form: duration = %v, tail = %v, err = %v; want 4, 0", got.DurationSec, got.TailSec, err)
+	}
+}
+
+func TestBounceSessionPassChecksTheSongBeforeTouchingLive(t *testing.T) {
+	t.Parallel()
+
+	nine := 9
+	for name, input := range map[string]BounceSessionPassInput{
+		"both forms":    {Sections: []SongSection{{SceneIndex: 0, Bars: 2}}, SceneIndices: []int{0}},
+		"no bars":       {Sections: []SongSection{{SceneIndex: 0, Bars: 0}}},
+		"long tail":     {Sections: []SongSection{{SceneIndex: 0, Bars: 2}}, TailBars: &nine},
+		"missing scene": {Sections: []SongSection{{SceneIndex: 9, Bars: 2}}},
+	} {
+		live := newFakeRecorder()
+		live.trackNames = []string{"Drums", "Bass", "Bounce"}
+		if _, err := bounceSessionPass(live, live.deps(), input); err == nil {
+			t.Errorf("%s: expected an error", name)
+		}
+		if len(live.calls) != 0 {
+			t.Errorf("%s: Live was touched: %v", name, live.addresses())
+		}
+	}
+}
