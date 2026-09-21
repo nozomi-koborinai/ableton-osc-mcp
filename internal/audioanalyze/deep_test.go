@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -84,5 +85,25 @@ func TestAnalyzeRejectsADownbeatOutsideTheAudio(t *testing.T) {
 		if _, err := AnalyzeFile(path, opts); err == nil {
 			t.Errorf("%s: expected an error", name)
 		}
+	}
+}
+
+// The deep analysis reads the first two minutes of the window. A downbeat
+// beyond that is inside the audio and still out of reach: it has to be refused
+// for what it is, not answered with "fewer than two bars".
+func TestAnalyzeRejectsADownbeatBeyondTheTwoMinutesItReads(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	if err := writeWAV(&buf, [][]float64{testNoise(130 * 8000)}, 8000, 16, nil); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "long.wav")
+	if err := os.WriteFile(path, buf.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := AnalyzeFile(path, Options{Deep: true, DownbeatSec: 125, DownbeatSet: true})
+	if err == nil || !strings.Contains(err.Error(), "120") {
+		t.Errorf("error = %v, want it to say that the deep analysis reads 120 s", err)
 	}
 }

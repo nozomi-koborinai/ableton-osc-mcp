@@ -198,8 +198,12 @@ func analyzeStream(r io.Reader, opts Options) (Result, error) {
 		if !opts.Deep {
 			return Result{}, errors.New("downbeat_sec only means something with deep=true")
 		}
-		if total := float64(len(audio.mono)) / float64(audio.sampleRate); opts.DownbeatSec < 0 || opts.DownbeatSec >= total {
+		total := float64(len(audio.mono)) / float64(audio.sampleRate)
+		if opts.DownbeatSec < 0 || opts.DownbeatSec >= total {
 			return Result{}, fmt.Errorf("downbeat_sec %.2f is outside the analyzed audio (%.2f s)", opts.DownbeatSec, total)
+		}
+		if opts.DownbeatSec >= deepMaxSec {
+			return Result{}, fmt.Errorf("downbeat_sec %.2f is beyond the %d s the deep analysis reads; move the window there with start_sec and give the downbeat from its start", opts.DownbeatSec, deepMaxSec)
 		}
 	}
 	projectTempo := opts.ProjectTempo
