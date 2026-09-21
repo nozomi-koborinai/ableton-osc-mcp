@@ -260,6 +260,9 @@ func recordResampledPass(c recordClient, deps recordDeps, plan recordPlan) (take
 				if err := waitUntilSongTime(c, deps.sleep, boundary-leadBeats, tempo); err != nil {
 					return recordedTake{}, err
 				}
+				if err := ensureStillPlaying(c); err != nil {
+					return recordedTake{}, err
+				}
 			}
 			if err := c.Send("/live/scene/fire", int32(*span.SceneIndex)); err != nil {
 				return recordedTake{}, fmt.Errorf("fire scene %d: %w", *span.SceneIndex, err)

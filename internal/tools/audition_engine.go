@@ -219,7 +219,6 @@ type auditionRun struct {
 // quantized, so they go out ahead of the line; the rest goes out just before it.
 func (r *auditionRun) switchTo(next auditionState, line float64) error {
 	cmds := commandsBetween(r.current, next)
-	r.pending = &next
 	steps := []struct {
 		at        float64
 		quantized bool
@@ -231,10 +230,20 @@ func (r *auditionRun) switchTo(next auditionState, line float64) error {
 		if err := waitUntilSongTime(r.client, r.sleep, step.at, r.tempo); err != nil {
 			return err
 		}
+		launching := false
+		for _, cmd := range cmds {
+			launching = launching || (cmd.quantized && step.quantized)
+		}
+		if launching {
+			if err := ensureStillPlaying(r.client); err != nil {
+				return err
+			}
+		}
 		for _, cmd := range cmds {
 			if cmd.quantized != step.quantized {
 				continue
 			}
+			r.pending = &next // from here on the switch may be half done
 			if err := r.client.Send(cmd.address, cmd.args...); err != nil {
 				return fmt.Errorf("%s: %w", cmd.address, err)
 			}
@@ -441,10 +450,11 @@ func (r *auditionRun) commit(out AuditionOutput, input AuditionInput, v audition
 			return AuditionOutput{}, r.failure("", "variant "+v.Label, err)
 		}
 		undoGrid()
-		if input.StopAfter {
-			if err := r.client.Send("/live/song/stop_playing"); err != nil {
-				return AuditionOutput{}, fmt.Errorf("stop playback: %w", err)
-			}
+	}
+	// Asked for whether or not the variant had anything to write.
+	if input.StopAfter {
+		if err := r.client.Send("/live/song/stop_playing"); err != nil {
+			return AuditionOutput{}, fmt.Errorf("stop playback: %w", err)
 		}
 	}
 

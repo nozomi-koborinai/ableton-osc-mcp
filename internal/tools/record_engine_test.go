@@ -21,6 +21,7 @@ import (
 //   - Commands take a moment to reach Live (AbletonOSC works through its queue
 //     on a timer), so one sent just before a bar line lands after it and waits
 //     for the following bar.
+//   - Launching a clip or a scene starts a stopped transport.
 //   - Session Record records on *every* armed track. Live arms a MIDI track by
 //     itself when it gets selected, so a listener's set usually has one: it
 //     would get a stray empty clip, and whatever it was playing would stop.
@@ -38,6 +39,7 @@ type fakeRecorder struct {
 	filePath      string
 	sendErr       map[string]error
 
+	stopAt       float64      // the listener stops the transport at this beat (0: never)
 	userArmed    map[int]bool // tracks the listener has armed (not the recording track)
 	strayTakes   int          // recordings Live started on the listener's armed tracks
 	armedTrack   int
@@ -104,7 +106,14 @@ func (f *fakeRecorder) barForCommand() float64 {
 // advance moves song time forward and lets everything that was waiting for a
 // bar line happen as that line is crossed.
 func (f *fakeRecorder) advance(d time.Duration) {
+	if f.stopAt > 0 && !f.isPlaying {
+		return // stopped by the listener: song time stands still
+	}
 	target := f.songTime + d.Seconds()*f.tempo/60
+	if f.stopAt > 0 && target >= f.stopAt {
+		target = f.stopAt
+		defer func() { f.isPlaying = false }()
+	}
 	for {
 		bar := f.nextBar()
 		if bar > target+barLineTolerance {
@@ -244,6 +253,7 @@ func (f *fakeRecorder) Send(address string, args ...interface{}) error {
 			f.stopButton[t] = append(f.stopButton[t], true)
 		}
 	case "/live/scene/fire":
+		f.isPlaying = true // launching anything starts a stopped transport
 		bar := f.barForCommand()
 		f.sceneAt[bar] = append(f.sceneAt[bar], intArg(0))
 	case "/live/track/set/arm":
@@ -628,5 +638,30 @@ func TestLocateWindow(t *testing.T) {
 	var actionableErr *ActionableError
 	if !errors.As(err, &actionableErr) || actionableErr.Code != "recording_too_short" {
 		t.Errorf("3 s file: error = %v, want recording_too_short", err)
+	}
+}
+
+// The last stretch of a wait is slept, not polled, so a stop in that stretch
+// goes unnoticed by the wait. The launch that follows must not undo it.
+func TestRecordPassDoesNotRelaunchAfterTheListenerStopped(t *testing.T) {
+	t.Parallel()
+
+	live := newFakeRecorder()
+	live.stopAt = 10.8 // scene 1 is due at beat 12 and would be launched at 11
+	_, err := recordResampledPass(live, live.deps(), recordPlan{
+		TrackName: "Measure",
+		Spans:     []recordSpan{{SceneIndex: scene(0), Bars: 2}, {SceneIndex: scene(1), Bars: 2}},
+	})
+	if !errors.Is(err, errTransportStopped) {
+		t.Fatalf("error = %v, want transport_stopped", err)
+	}
+	launches := 0
+	for _, call := range live.calls {
+		if call.address == "/live/scene/fire" {
+			launches++
+		}
+	}
+	if launches != 1 || live.isPlaying {
+		t.Errorf("scene launches = %d, playing = %v; want only the first scene launched and playback left stopped", launches, live.isPlaying)
 	}
 }

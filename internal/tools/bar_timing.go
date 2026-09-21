@@ -203,6 +203,17 @@ func waitUntilSongTime(client auditionClient, sleep auditionSleeper, targetBeats
 	}
 }
 
+// ensureStillPlaying guards a launch. The last stretch of a wait is slept, not
+// polled, so a stop in that stretch goes unnoticed by the wait. Launching a clip
+// or a scene starts a stopped transport: it would undo what the listener has
+// just done, and the tool would carry on as if nothing had happened.
+func ensureStillPlaying(client auditionClient) error {
+	if playing, err := queryAuditionIsPlaying(client); err == nil && !playing {
+		return errTransportStopped
+	}
+	return nil
+}
+
 // ceilBarBeat returns the next bar boundary strictly after songTime when quantized to 1 bar.
 // Firing exactly on a downbeat still waits for the following bar under Live's 1-bar quantization.
 func ceilBarBeat(songTime float64, beatsPerBar int) float64 {

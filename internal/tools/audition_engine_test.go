@@ -30,7 +30,6 @@ type fakeAuditionLive struct {
 	pending       map[float64][][2]int // bar line -> {track, slot} launches and stops waiting for it
 	devices       map[[2]int]bool
 	selectedTrack int
-	stopAt        float64 // the listener stops the transport at this beat (0: never)
 	timeline      []auditionEvent
 }
 
@@ -525,5 +524,43 @@ func TestAuditionStartsAStoppedTransportAndCanStopItAgain(t *testing.T) {
 	}
 	if !got.PlaybackStarted || live.isPlaying {
 		t.Errorf("playback_started=%v, still playing=%v; want started by the tool and stopped after", got.PlaybackStarted, live.isPlaying)
+	}
+}
+
+// The last stretch of a wait is slept, not polled, so a stop in that stretch
+// goes unnoticed by the wait. Launching a clip would start playback again: the
+// listener pressed stop, and the audition would carry on regardless.
+func TestAuditionDoesNotRestartPlaybackStoppedJustBeforeALaunch(t *testing.T) {
+	t.Parallel()
+
+	live := newFakeAuditionLive()
+	live.stopAt = 10.8 // B's clip is due at beat 12 and would be launched at 11
+	_, err := runAudition(live, live.sleeper(), AuditionInput{Variants: testVariants(), BarsPerVariant: 2})
+	var actionableErr *ActionableError
+	if !errors.As(err, &actionableErr) || actionableErr.Code != "audition_interrupted" || !strings.Contains(actionableErr.Message, "variant X") {
+		t.Fatalf("error = %v, want audition_interrupted while variant X was playing", err)
+	}
+	if len(live.events("/live/clip_slot/fire")) != 0 || live.isPlaying {
+		t.Errorf("fires = %v, playing = %v; want nothing launched and playback left stopped", live.events("/live/clip_slot/fire"), live.isPlaying)
+	}
+	if live.playing[0] != 0 || live.indicatorName() != "Audition" || live.quantization != 7 {
+		t.Errorf("clip %d, indicator %q, quantization %d; want the baseline back", live.playing[0], live.indicatorName(), live.quantization)
+	}
+}
+
+func TestAuditionCommitOfAnUnchangedVariantStillStopsPlaybackWhenAsked(t *testing.T) {
+	t.Parallel()
+
+	live := newFakeAuditionLive()
+	got, err := runAudition(live, live.sleeper(), AuditionInput{Variants: testVariants(), Commit: "X", StopAfter: true})
+	if err != nil {
+		t.Fatalf("runAudition() error = %v", err)
+	}
+	if got.Committed == nil || got.Committed.Label != "X" {
+		t.Errorf("committed = %+v, want X", got.Committed)
+	}
+	// X changes nothing, so nothing is written. stop_after was asked for all the same.
+	if live.isPlaying || len(live.timeline) != 1 || live.timeline[0].address != "/live/song/stop_playing" {
+		t.Errorf("playing = %v, sent = %+v; want playback stopped and nothing else sent", live.isPlaying, live.timeline)
 	}
 }
