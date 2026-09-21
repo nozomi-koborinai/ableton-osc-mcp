@@ -57,6 +57,34 @@ def find_value_for_db(display_of, lo, hi, target_db, fine=0.002, coarse=0.051, m
     return best, best_diff <= coarse
 
 
+# Arrangement clips are (name, start_beat, end_beat). Live hands back floats, so
+# edges are compared with a little slack: a clip that ends on beat 24 and one
+# that starts there do not overlap, whatever the last digit says.
+ARRANGEMENT_EDGE_SLACK = 1e-4
+
+
+def clips_touching(clips, from_beat, to_beat):
+    """Clips that overlap [from_beat, to_beat). A bound of None is open."""
+    picked = []
+    for clip in clips:
+        _name, start, end = clip
+        if to_beat is not None and start >= to_beat - ARRANGEMENT_EDGE_SLACK:
+            continue
+        if from_beat is not None and end <= from_beat + ARRANGEMENT_EDGE_SLACK:
+            continue
+        picked.append(clip)
+    return picked
+
+
+def clips_inside(clips, from_beat, to_beat):
+    """Clips that lie wholly inside [from_beat, to_beat]: the only ones a range
+    may delete, because deleting takes the whole clip."""
+    return [
+        clip for clip in clips
+        if clip[1] >= from_beat - ARRANGEMENT_EDGE_SLACK and clip[2] <= to_beat + ARRANGEMENT_EDGE_SLACK
+    ]
+
+
 def _browser_roots(browser):
     roots = []
     for attr in (
@@ -1094,7 +1122,66 @@ class BrowserHandler(AbletonOSCHandler):
                 reply.extend(_level_reply(track.mixer_device.volume))
             return tuple(reply)
 
+        def _arrangement_clips(track):
+            return [(str(clip.name), float(clip.start_time), float(clip.end_time)) for clip in track.arrangement_clips]
+
+        def _optional_beat(params, index):
+            if len(params) <= index:
+                return None
+            value = float(params[index])
+            return None if value < 0 else value
+
+        def track_get_arrangement_clips_handler(params: Tuple[Any]):
+            """Params: track_index, from_beat, to_beat (both optional; negative = open).
+
+            Reply: (track_index, count, name0, start0, end0, name1, ...), the clips
+            that overlap the range, in time order. Stock AbletonOSC cannot read
+            the Arrangement at all.
+            """
+            if len(params) < 1:
+                return ("error", "missing_args")
+            track_index = int(params[0])
+            track = _track_or_none(track_index)
+            if track is None:
+                return (track_index, "invalid_track_index")
+            try:
+                clips = clips_touching(_arrangement_clips(track), _optional_beat(params, 1), _optional_beat(params, 2))
+            except Exception as exc:
+                return (track_index, "error", str(exc))
+            reply = [track_index, len(clips)]
+            for name, start, end in sorted(clips, key=lambda clip: clip[1]):
+                reply.extend([name, start, end])
+            return tuple(reply)
+
+        def track_delete_arrangement_clips_handler(params: Tuple[Any]):
+            """Params: track_index, from_beat, to_beat.
+
+            Deletes the Arrangement clips that lie wholly inside the range, and
+            only those: a clip that sticks out of it stays whole.
+            Reply: (track_index, "ok", deleted, still_touching).
+            """
+            if len(params) < 3:
+                return ("error", "missing_args")
+            track_index = int(params[0])
+            from_beat, to_beat = float(params[1]), float(params[2])
+            track = _track_or_none(track_index)
+            if track is None:
+                return (track_index, "invalid_track_index")
+            try:
+                doomed = clips_inside(_arrangement_clips(track), from_beat, to_beat)
+                deleted = 0
+                for clip in list(track.arrangement_clips):
+                    if (str(clip.name), float(clip.start_time), float(clip.end_time)) in doomed:
+                        track.delete_clip(clip)
+                        deleted += 1
+                left = len(clips_touching(_arrangement_clips(track), from_beat, to_beat))
+            except Exception as exc:
+                return (track_index, "error", str(exc))
+            return (track_index, "ok", deleted, left)
+
         self.osc_server.add_handler("/live/track/get/volume_db", track_get_volume_db_handler)
+        self.osc_server.add_handler("/live/track/get/arrangement_clips", track_get_arrangement_clips_handler)
+        self.osc_server.add_handler("/live/track/delete_arrangement_clips", track_delete_arrangement_clips_handler)
         self.osc_server.add_handler("/live/track/get/volume_for_db", track_get_volume_for_db_handler)
         self.osc_server.add_handler("/live/track/get/send_db", track_get_send_db_handler)
         self.osc_server.add_handler("/live/track/get/send_for_db", track_get_send_for_db_handler)
