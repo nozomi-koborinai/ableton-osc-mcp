@@ -20,29 +20,41 @@ def parse_db_display(text):
     return float(match.group())
 
 
-def find_value_for_db(display_of, lo, hi, target_db, tolerance=0.051, max_steps=24):
+def find_value_for_db(display_of, lo, hi, target_db, fine=0.002, coarse=0.051, max_steps=32):
     """Binary-search the raw parameter value whose display reads target_db.
 
     Live publishes no formula for its fader law, but str_for_value is monotonic,
     so the display string is the ground truth. Nothing is changed in Live.
+
+    Live 11 answers with up to three decimals ("-6.031 dB"), so the search keeps
+    going until it is within `fine`. A display with fewer decimals can never get
+    that close to a target between its steps; the closest value seen still
+    counts as a hit if it is within `coarse`.
+
     Returns (raw, reached); reached is False when the parameter cannot show
     target_db (e.g. +10 dB on a fader that tops out at +6 dB).
     """
     if target_db <= -70.0:
         return lo, True
-    best = hi
+    best, best_diff = hi, None
     for _ in range(max_steps):
         mid = (lo + hi) / 2.0
         shown = parse_db_display(display_of(mid))
-        best = mid
-        if shown is not None and abs(shown - target_db) <= tolerance:
-            return best, True
+        if shown is not None:
+            diff = abs(shown - target_db)
+            if best_diff is None or diff < best_diff:
+                best, best_diff = mid, diff
+            if diff <= fine:
+                break
         if shown is None or shown < target_db:
             lo = mid
         else:
             hi = mid
-    shown = parse_db_display(display_of(best))
-    return best, shown is not None and abs(shown - target_db) <= tolerance
+    if best_diff is None:
+        # Every probe read as silence: the edge of the range is the closest there is.
+        edge = parse_db_display(display_of(hi))
+        return hi, edge is not None and abs(edge - target_db) <= coarse
+    return best, best_diff <= coarse
 
 
 def _browser_roots(browser):

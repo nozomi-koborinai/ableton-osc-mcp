@@ -42,6 +42,18 @@ def fake_fader_display(value):
     return "%.1f dB" % db
 
 
+def fine_fader_display(value):
+    """What Live 11 actually returns from str_for_value: up to three decimals
+    ("-6.031 dB"), not the single decimal the mixer UI shows."""
+    if value <= 0.0:
+        return "-inf dB"
+    if value >= 0.4:
+        db = 40.0 * value - 34.0
+    else:
+        db = -18.0 - (0.4 - value) * 130.0
+    return "%.3f dB" % db
+
+
 class ParseDbDisplayTest(unittest.TestCase):
     def test_reads_negative_zero_and_positive_levels(self):
         self.assertEqual(browser.parse_db_display("-6.0 dB"), -6.0)
@@ -83,6 +95,21 @@ class FindValueForDbTest(unittest.TestCase):
             raw, reached = self.find(target)
             self.assertTrue(reached)
             self.assertEqual(raw, 0.0)
+
+    def test_uses_all_the_precision_the_display_offers(self):
+        # Live answers with three decimals, so "-6 dB" should not settle for -6.03.
+        for target in (-6.0, -24.0, 0.0):
+            raw, reached = browser.find_value_for_db(fine_fader_display, 0.0, 1.0, target)
+            self.assertTrue(reached)
+            shown = browser.parse_db_display(fine_fader_display(raw))
+            self.assertLessEqual(abs(shown - target), 0.002, "asked %s, got %s" % (target, shown))
+
+    def test_a_coarse_display_still_resolves_targets_between_its_steps(self):
+        # With one decimal on show, -6.04 can only ever read -6.0: that is a hit,
+        # not a level the fader cannot reach.
+        raw, reached = self.find(-6.04)
+        self.assertTrue(reached)
+        self.assertEqual(fake_fader_display(raw), "-6.0 dB")
 
     def test_reports_a_level_the_fader_cannot_reach(self):
         raw, reached = self.find(10.0)  # the fader tops out at +6 dB
