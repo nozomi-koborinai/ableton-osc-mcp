@@ -489,51 +489,6 @@ class BrowserHandler(AbletonOSCHandler):
                 return (track_index, device_index, "error", str(exc))
             return (track_index, device_index, "deleted", device_name, devices_before, len(track.devices))
 
-        def device_get_is_active_handler(params: Tuple[Any]):
-            """Params: track_index, device_index.
-
-            Reply: (track_index, device_index, is_active) where is_active is 0/1.
-            Stock AbletonOSC does not expose Device.is_active for FX bypass A/B.
-            """
-            if len(params) < 2:
-                return ("error", "missing_args")
-            track_index = int(params[0])
-            device_index = int(params[1])
-            if track_index < 0 or track_index >= len(self.song.tracks):
-                return (track_index, device_index, "invalid_track_index")
-            track = self.song.tracks[track_index]
-            if device_index < 0 or device_index >= len(track.devices):
-                return (track_index, device_index, "invalid_device_index")
-            device = track.devices[device_index]
-            try:
-                active = 1 if bool(device.is_active) else 0
-            except Exception as exc:
-                return (track_index, device_index, "error", str(exc))
-            return (track_index, device_index, active)
-
-        def device_set_is_active_handler(params: Tuple[Any]):
-            """Params: track_index, device_index, is_active (0/1).
-
-            Reply: (track_index, device_index, "ok", is_active).
-            """
-            if len(params) < 3:
-                return ("error", "missing_args")
-            track_index = int(params[0])
-            device_index = int(params[1])
-            want = int(params[2]) != 0
-            if track_index < 0 or track_index >= len(self.song.tracks):
-                return (track_index, device_index, "invalid_track_index")
-            track = self.song.tracks[track_index]
-            if device_index < 0 or device_index >= len(track.devices):
-                return (track_index, device_index, "invalid_device_index")
-            device = track.devices[device_index]
-            try:
-                device.is_active = want
-                active = 1 if bool(device.is_active) else 0
-            except Exception as exc:
-                return (track_index, device_index, "error", str(exc))
-            return (track_index, device_index, "ok", active)
-
         def _resolve_simpler(track_index: int, device_index: int):
             """Return (simpler_device, None) or (None, error_status)."""
             if track_index < 0 or track_index >= len(self.song.tracks):
@@ -721,8 +676,6 @@ class BrowserHandler(AbletonOSCHandler):
             device_set_parameter_string_handler,
         )
         self.osc_server.add_handler("/live/device/delete", device_delete_handler)
-        self.osc_server.add_handler("/live/device/get/is_active", device_get_is_active_handler)
-        self.osc_server.add_handler("/live/device/set/is_active", device_set_is_active_handler)
         self.osc_server.add_handler("/live/device/simpler/get", device_simpler_get_handler)
         self.osc_server.add_handler("/live/device/simpler/set", device_simpler_set_handler)
         self.osc_server.add_handler("/live/device/simpler/get/slices", device_simpler_get_slices_handler)

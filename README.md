@@ -45,7 +45,6 @@ This repo ships a small Remote Script patch under [`remote-script/`](remote-scri
 - `/live/device/get/parameters/value_string` (all parameter display strings in one reply)
 - `/live/device/set/parameter/string` (set a parameter from a display string)
 - `/live/device/delete` (delete a device; confirms with before/after device count)
-- `/live/device/get|set/is_active` (device on/bypass for FX dry/wet A/B)
 - `/live/device/simpler/get` · `/set` · `/get/slices` (Simpler playback/slicing state, control, and slice map)
 - `/live/device/simpler/set/slices` (restore a saved manual slice map onto the same sample)
 - `/live/song/get/return_tracks` (list return tracks for send indices)

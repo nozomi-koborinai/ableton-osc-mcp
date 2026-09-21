@@ -325,7 +325,7 @@ func captureAuditionBaseline(c auditionClient, variants []AuditionVariant) (audi
 			if _, done := baseline.devices[key]; done {
 				continue
 			}
-			active, err := queryDeviceIsActive(c, d.TrackIndex, d.DeviceIndex)
+			active, err := queryDeviceOn(c, d.TrackIndex, d.DeviceIndex)
 			if err != nil {
 				return baseline, nil, err
 			}
@@ -690,31 +690,18 @@ func ensureAuditionIndicator(c auditionClient, sleep auditionSleeper) (int, stri
 	return index, auditionIndicatorName, nil
 }
 
-// queryDeviceIsActive reads a device's on/off switch (needs the browser patch).
-func queryDeviceIsActive(client oscQuerier, trackIndex, deviceIndex int) (bool, error) {
-	res, err := client.Query("/live/device/get/is_active", int32(trackIndex), int32(deviceIndex))
+// queryDeviceOn reads a device's own on/off switch, its "Device On" parameter.
+func queryDeviceOn(client oscQuerier, trackIndex, deviceIndex int) (bool, error) {
+	res, err := client.Query("/live/device/get/parameter/value", int32(trackIndex), int32(deviceIndex), int32(deviceOnParameter))
 	if err != nil {
-		return false, actionable(
-			"device_is_active_unavailable",
-			fmt.Sprintf("could not read is_active for device %d: %v", deviceIndex, err),
-			"Install/update the browser patch (device get/set is_active), then restart Live or send /live/api/reload.",
-		)
+		return false, fmt.Errorf("read the on/off switch of device %d on track %d: %w", deviceIndex, trackIndex, err)
 	}
-	if len(res) >= 3 {
-		if status, ok := res[2].(string); ok && status != "" {
-			return false, actionable(
-				"device_is_active_error",
-				fmt.Sprintf("get is_active failed: %s", status),
-				"Check track_index/device_index with ableton_get_track_devices, then retry.",
-			)
-		}
+	if err := ensureResponseLen(res, 4); err != nil {
+		return false, fmt.Errorf("read the on/off switch of device %d on track %d: %w", deviceIndex, trackIndex, err)
 	}
-	if err := ensureResponseLen(res, 3); err != nil {
-		return false, fmt.Errorf("get is_active: %w", err)
-	}
-	active, err := abletonosc.AsInt(res[2])
+	value, err := abletonosc.AsFloat64(res[3])
 	if err != nil {
-		return false, fmt.Errorf("get is_active: %w", err)
+		return false, fmt.Errorf("read the on/off switch of device %d on track %d: %w", deviceIndex, trackIndex, err)
 	}
-	return active != 0, nil
+	return value >= 0.5, nil
 }

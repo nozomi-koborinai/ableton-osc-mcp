@@ -68,7 +68,7 @@ func TestCommandsBetweenSendsOnlyWhatDiffers(t *testing.T) {
 		"/live/clip_slot/fire [2 0] (ahead)",
 		"/live/clip_slot/fire [5 2] (ahead)",
 		"/live/track/set/volume [3 0.85] (on the line)",
-		"/live/device/set/is_active [3 1 0] (on the line)",
+		"/live/device/set/parameter/value [3 1 0 0] (on the line)",
 	}; !reflect.DeepEqual(got, want) {
 		t.Errorf("B -> C = %v, want %v", got, want)
 	}
@@ -76,7 +76,7 @@ func TestCommandsBetweenSendsOnlyWhatDiffers(t *testing.T) {
 	// C -> X: track 5 was silent before the audition, so it is stopped rather than fired.
 	if got, want := describeCommands(commandsBetween(c, base)), []string{
 		"/live/track/stop_all_clips [5] (ahead)",
-		"/live/device/set/is_active [3 1 1] (on the line)",
+		"/live/device/set/parameter/value [3 1 0 1] (on the line)",
 	}; !reflect.DeepEqual(got, want) {
 		t.Errorf("C -> X = %v, want %v", got, want)
 	}

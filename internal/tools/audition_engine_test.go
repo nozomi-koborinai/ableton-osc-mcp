@@ -3,6 +3,7 @@ package tools
 import (
 	"errors"
 	"fmt"
+	"math"
 	"reflect"
 	"strings"
 	"testing"
@@ -17,7 +18,9 @@ import (
 //   - A clip fire or a track stop lands on the next bar line (1-bar
 //     quantization). While the transport is stopped it lands at once, and a
 //     fire starts the transport.
-//   - A fader or a device switch takes effect the moment it is sent.
+//   - A fader or a device switch takes effect the moment it is sent. A device
+//     is switched with its first parameter, "Device On": Device.is_active is
+//     read-only in Live, and writing to it changes nothing.
 //   - A new track is appended and becomes the selected track.
 //   - The listener can stop the transport (stopAt): song time freezes there.
 type fakeAuditionLive struct {
@@ -61,16 +64,17 @@ func (f *fakeAuditionLive) advance(d float64) {
 	}
 	for {
 		bar := f.nextBar()
-		if bar > target {
+		if bar > target+barLineTolerance {
 			break
 		}
 		f.songTime = bar
+		f.crossBar(bar)
 		for _, launch := range f.pending[bar] {
 			f.playing[launch[0]] = launch[1]
 		}
 		delete(f.pending, bar)
 	}
-	f.songTime = target
+	f.songTime = math.Max(f.songTime, target) // never back behind a line just crossed
 }
 
 func (f *fakeAuditionLive) sleeper() auditionSleeper {
@@ -98,9 +102,12 @@ func (f *fakeAuditionLive) Query(address string, args ...interface{}) ([]interfa
 		return []interface{}{int32(t), int32(n)}, nil
 	case "/live/track/get/playing_slot_index":
 		return []interface{}{int32(intArg(0)), int32(f.playing[intArg(0)])}, nil
-	case "/live/device/get/is_active":
+	case "/live/device/get/parameter/value":
 		key := [2]int{intArg(0), intArg(1)}
-		return []interface{}{int32(key[0]), int32(key[1]), boolInt32(f.devices[key])}, nil
+		if intArg(2) != 0 {
+			return nil, errors.New("the fake only knows parameter 0, Device On")
+		}
+		return []interface{}{int32(key[0]), int32(key[1]), int32(0), float32(boolInt32(f.devices[key]))}, nil
 	case "/live/track/get/volume_db", "/live/track/get/volume_for_db", "/live/song/get/track_volumes_db":
 		return f.mixer.Query(address, args...)
 	}
@@ -138,9 +145,13 @@ func (f *fakeAuditionLive) Send(address string, args ...interface{}) error {
 		return nil
 	case "/live/track/set/volume":
 		return f.mixer.Send(address, args...)
-	case "/live/device/set/is_active":
-		f.devices[[2]int{intArg(0), intArg(1)}] = intArg(2) == 1
+	case "/live/device/set/parameter/value":
+		if intArg(2) == 0 {
+			f.devices[[2]int{intArg(0), intArg(1)}] = args[3].(float32) >= 0.5
+		}
 		return nil
+	case "/live/device/set/is_active":
+		return nil // Live: "can't set attribute". Device.is_active is read-only, so nothing happens.
 	case "/live/track/set/name":
 		f.trackNames[intArg(0)] = args[1].(string)
 		return nil
@@ -257,7 +268,7 @@ func TestAuditionFiresClipsAheadOfTheLineAndMovesFadersOnIt(t *testing.T) {
 	if len(volumes) == 0 || volumes[0].at < 11.5 || volumes[0].at >= 12 {
 		t.Errorf("first fader move at beat %v, want just ahead of bar line 12", volumes[0].at)
 	}
-	if names := live.events("/live/track/set/name"); len(names) < 3 || names[2].at < 12 || names[2].at > 12.1 {
+	if names := live.events("/live/track/set/name"); len(names) < 3 || names[2].at < 12-1e-3 || names[2].at > 12.1 {
 		t.Errorf("renames = %+v, want the label to change to B on bar line 12", names)
 	}
 }
@@ -379,7 +390,7 @@ func TestAuditionPutsLiveBackWhenAStepFails(t *testing.T) {
 	variants := testVariants()
 	variants[2].Mix = []AuditionMix{{TrackIndex: 0, DeltaDB: -3}}
 	live := newFakeAuditionLive()
-	failing := &failOnce{fakeAuditionLive: live, address: "/live/device/set/is_active"}
+	failing := &failOnce{fakeAuditionLive: live, address: "/live/device/set/parameter/value"}
 	_, err := runAudition(failing, live.sleeper(), AuditionInput{Variants: variants, BarsPerVariant: 1})
 	var actionableErr *ActionableError
 	if !errors.As(err, &actionableErr) || actionableErr.Code != "audition_failed" || !strings.Contains(actionableErr.Message, "variant C") {

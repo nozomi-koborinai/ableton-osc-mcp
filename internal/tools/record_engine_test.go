@@ -83,6 +83,10 @@ func asTestInt(v interface{}) (int, error) {
 	return 0, errors.New("not an int")
 }
 
+// barLineTolerance makes a sleep that ends on a bar line cross it: durations are
+// whole nanoseconds, so such a sleep can come out a rounding error short.
+const barLineTolerance = 1e-6
+
 // commandLatencyBeats is how long a command takes to take effect in the fake.
 const commandLatencyBeats = 0.3
 
@@ -103,13 +107,13 @@ func (f *fakeRecorder) advance(d time.Duration) {
 	target := f.songTime + d.Seconds()*f.tempo/60
 	for {
 		bar := f.nextBar()
-		if bar > target {
+		if bar > target+barLineTolerance {
 			break
 		}
 		f.songTime = bar
 		f.crossBar(bar)
 	}
-	f.songTime = target
+	f.songTime = math.Max(f.songTime, target) // never back behind a line just crossed
 }
 
 func (f *fakeRecorder) crossBar(bar float64) {

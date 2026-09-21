@@ -18,8 +18,6 @@ Developed and smoke-tested against **Ableton Live 11.0.12** (API label `11.0`). 
 | `/live/device/get/parameters/value_string` | `track_index`, `device_index` | All parameter display strings in one reply (e.g. `37.0 Hz`, `1/2`, `Ins`) |
 | `/live/device/set/parameter/string` | `track_index`, `device_index`, `parameter_index`, `value` | Set a parameter from a display string (enum name, or numeric with unit like `180 Hz`) |
 | `/live/device/delete` | `track_index`, `device_index` | Delete a device; replies with the device name and count before/after (stock delete is silent) |
-| `/live/device/get/is_active` | `track_index`, `device_index` | Device on/bypass state (`0`/`1`) for FX dry/wet A/B |
-| `/live/device/set/is_active` | `track_index`, `device_index`, `is_active` | Set device on/bypass (`0`/`1`) |
 | `/live/device/simpler/get` | `track_index`, `device_index` | Simpler state: playback_mode, slicing_playback_mode, slicing_style, slicing_beat_division, num_slices, has_sample |
 | `/live/device/simpler/set` | `track_index`, `device_index`, `property`, `value` | Set a Simpler property (playback_mode / slicing_playback_mode / slicing_style / slicing_beat_division) |
 | `/live/device/simpler/get/slices` | `track_index`, `device_index` | Slice map: sample_rate, sample_length, then slice start positions in samples |

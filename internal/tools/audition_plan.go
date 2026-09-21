@@ -2,6 +2,10 @@ package tools
 
 import "sort"
 
+// deviceOnParameter is the index of "Device On": the first parameter of every
+// Live device, and the only way to switch one on or off from outside.
+const deviceOnParameter = 0
+
 // auditionState holds the value of everything any variant touches. A clip
 // value of -1 means nothing is playing on that track.
 type auditionState struct {
@@ -104,7 +108,9 @@ func commandsBetween(from, to auditionState) []auditionCommand {
 	})
 	for _, key := range keys {
 		if from.devices[key] != to.devices[key] {
-			cmds = append(cmds, auditionCommand{"/live/device/set/is_active", []interface{}{int32(key[0]), int32(key[1]), boolInt32(to.devices[key])}, false})
+			// A device is switched with its first parameter, "Device On". Live's
+			// Device.is_active only reports: writing to it fails.
+			cmds = append(cmds, auditionCommand{"/live/device/set/parameter/value", []interface{}{int32(key[0]), int32(key[1]), int32(deviceOnParameter), float32(boolInt32(to.devices[key]))}, false})
 		}
 	}
 	return cmds
