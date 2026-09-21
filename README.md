@@ -26,6 +26,7 @@ This enables AI assistants (Claude, Cursor, etc.) to interact with Ableton Live 
 - Capture and restore track volumes as mix snapshots
 - Match an audio clip to the project tempo with Warp (e.g. after loading a sample)
 - Analyze a local `.wav`/`.aif`, or reference-analyze an `http(s)`/YouTube URL, for duration, levels, BPM/key alternatives, chords, section map, rhythm density, rms_per_beat, band balance, match axes, texture, and a mix profile (integrated LUFS, true peak, crest, 9-band spectrum, per-band stereo width) (URL streams in memory and is never saved; no melody extraction)
+- Study a reference in depth (`deep`): its tuning, a beat and bar grid, extended chords with bass and scale degrees and the loop they make, and the drum pattern of kick/808, snare/clap and hats on sixteenths — from the full mix, no stem separation, no melody
 - Save a track's mix profile as a named reference (numbers only, never audio) and compare your own bounce against a weighted blend of references
 - Bounce a whole song in one pass — sections of different lengths, then a tail in which everything rings out — without an export dialog (`ableton_bounce_session_pass` with `sections`)
 - Lay the same sections out in the Arrangement, with a `Sections` track that names them, and read the Arrangement back in bars (`ableton_write_arrangement`, `ableton_get_arrangement`)
@@ -391,6 +392,43 @@ merged into a timed sequence (`chord_progression`) plus a compact summary
 busy mixes will be approximated, so use it as a reference for building your own
 part, not as a transcription.
 
+Key and chords are corrected for the track's **tuning** (`tuning`: cents away
+from A = 440, with a confidence and what A4 is in this track). Records are often
+pitched as a whole; 45 cents flat puts every note half way between two pitch
+classes, and a G major scale played that flat reads as B minor without the
+correction. It is measured on every analysis and applied when it can be trusted.
+
+With `deep: true` both tools go further into a reference track, on up to two
+minutes of the window (`start_sec` / `end_sec` choose which):
+
+- `grid` — beats and bar lines: tempo, first beat, first downbeat with a
+  confidence. An estimated tempo is often a simple ratio off (two thirds, on a
+  swung drill beat), so related tempos are tried and the one whose sixteenths the
+  onsets actually sit on wins. Pass `project_tempo` and `downbeat_sec` (0 for a
+  bounce) when they are known; they are taken as they are.
+- `harmony` — a chord for every half bar instead of every 0.75 s: the root from
+  30–200 Hz, where an 808 says it plainly, the rest from 200–2000 Hz, fitted
+  against triads, sus2/sus4, dim, 7, maj7, m7, add9, m(add9), maj9 and m9. Each
+  chord carries its bar and beat, its bass (`G#m7/B`), a confidence, and its
+  degree (`i`, `♭VI`, `♭VII`) measured from the loop's own home — the root it
+  keeps coming back to — because the key estimate of a whole mix is easily led
+  astray by a melody. `cycle_bars` and `summary` give the loop itself:
+  `D#m(add9) | D#m(add9) | Badd9 | C#add9`.
+- `drum_grid` — where the drums fall, on sixteenths folded over two bars, for
+  three bands: `low` (kick and 808 attacks, not told apart), `mid` (the crack of
+  snares, claps, rims), `high` (hats). One line per lane,
+  `x.....x...x.....|x......o....x..x` (`x` in most rounds, `o` in some), plus
+  how often and how hard each step sounds.
+
+All of it is read from the full mix, without stem separation, and folded over
+the track: statistics about a pattern and a harmony, not a transcription of any
+bar, and still no melody. What blurs it is said in the result: a loud vocal
+(extensions, the mid lane), a distorted 808 (its fifth harmonic makes a minor
+chord read as major), an intro or a breakdown in the range (no loop found —
+analyze the stretch that loops), a downbeat that is only a guess. A plain
+analysis — and every mix measurement — computes none of this and is as fast as
+before.
+
 They also return an approximate **section map** (`sections`): the track is
 divided by a self-similarity/novelty analysis, and each span is labeled by
 relative energy (`low` / `medium` / `high`) with its start time. Use it to spot
@@ -479,8 +517,8 @@ sharing a position, so a block-chord sketch is a few lines of text.
 | `ableton_set_track_volume` | Set track volume as dB (`db`), a change in dB (`delta_db`), or a raw position; returns the level Live displays (dB needs the patch) |
 | `ableton_clip_read` / `ableton_clip_write` | Read and replace a MIDI clip's notes as clip notation |
 | `ableton_match_clip_tempo` | Enable Warp on an audio clip so it follows the project tempo (`beats` or `complex`) |
-| `ableton_analyze_local_audio` | Analyze a local `.wav`/`.aif` (BPM/key alternatives, density, rms_per_beat, band_balance, match_axes, sections, onset grid, texture, mix_profile). Optional window, `references` to compare against saved profiles, `save_reference_as` to keep the numbers. Rejects URLs; no melody/note extraction |
-| `ableton_analyze_audio_url` | Reference-analyze an `http(s)`/YouTube URL (same production fields and mix_profile as local, minus the full onset list). Optional window and `save_reference_as`. Streams via yt-dlp+ffmpeg in memory; requires yt-dlp+ffmpeg |
+| `ableton_analyze_local_audio` | Analyze a local `.wav`/`.aif` (BPM/key alternatives, density, rms_per_beat, band_balance, match_axes, sections, onset grid, texture, mix_profile). Optional window, `references` to compare against saved profiles, `save_reference_as` to keep the numbers. Rejects URLs; no melody/note extraction Reports `tuning` and corrects key and chords for it; `deep` adds `grid`, `harmony` and `drum_grid` |
+| `ableton_analyze_audio_url` | Reference-analyze an `http(s)`/YouTube URL (same production fields and mix_profile as local, minus the full onset list). Optional window and `save_reference_as`. Streams via yt-dlp+ffmpeg in memory; requires yt-dlp+ffmpeg Reports `tuning` and corrects key and chords for it; `deep` adds `grid`, `harmony` and `drum_grid` |
 | `ableton_finalize_audio` | Turn a recording (.wav/.aif) into a delivery WAV: tail trimmed, DC out, fade-out, 44.1/48 kHz, 24/16 bit, level set against a true-peak ceiling with gain only; never touches the source; reports what the written file measures and what speaks against handing it in |
 | `ableton_list_reference_profiles` | List saved reference mix profiles (name, source, LUFS, crest, 9 bands) |
 | `ableton_audition` | Play 2–8 labelled variants back to back on bar lines (clips, track volume deltas in dB, devices on/off), show which one is sounding on an `Audition` track, put everything back; `commit` writes the chosen one in (real time) |
@@ -567,6 +605,7 @@ Once configured, you can ask your AI assistant:
 - "Warp that audio sample to the project tempo"
 - "Analyze this local wav and tell me its BPM and how many bars it is at 128"
 - "Analyze this YouTube track from 0:20 to 1:30 and keep it as the reference 'envy'"
+- "Go deep on that reference: what is the loop in degrees, and where do the kicks and claps fall?"
 - "Compare my bounce at ~/Music/mix_v3.aif with references envy (0.6) and crayon (0.4)"
 - "Measure 8 bars of the hook scene against references envy (0.6) and crayon (0.4), with drums, 808 and tops as groups"
 - "Autogain the drum and bass tracks while the beat is playing"
