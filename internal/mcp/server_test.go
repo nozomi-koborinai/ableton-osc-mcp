@@ -54,8 +54,8 @@ func TestServerExposesFullSchemas(t *testing.T) {
 	}
 
 	list := envelope.Result.Tools
-	if len(list) != 102 {
-		t.Fatalf("tools/list returned %d tools, want 102", len(list))
+	if len(list) != 103 {
+		t.Fatalf("tools/list returned %d tools, want 103", len(list))
 	}
 
 	// The regression this whole change exists to prevent.

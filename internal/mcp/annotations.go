@@ -44,6 +44,7 @@ var toolHints = map[string]hints{
 	"ableton_apply_device_intent":            {idempotent: true},
 	"ableton_apply_mix_variation":            {idempotent: true},
 	"ableton_arm_track":                      {idempotent: true},
+	"ableton_audition":                       {},
 	"ableton_audition_ab":                    {},
 	"ableton_autogain_tracks":                {idempotent: true},
 	"ableton_bounce_session_pass":            {},

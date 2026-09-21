@@ -61,6 +61,15 @@ type auditionClient interface {
 
 type auditionSleeper func(time.Duration)
 
+func NewAbletonAudition(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
+	return genkit.DefineTool(g, "ableton_audition",
+		"Ableton Live: play 2-8 labelled variants back to back, switching on bar lines, so the listener can answer with one letter. Each variant is the current state plus its own changes — clips to play instead, track volume changes in dB, devices switched on or off — and a variant with no changes (X) keeps the current state in the line-up. Runs in real time and blocks until the end: one pass is plays × bars_per_variant bars, after up to a bar of waiting. It starts playback if it is stopped, sets clip launch quantization to 1 bar for the duration, and adds one audio track named 'Audition' at the end of the set whose name shows which variant is sounding. Faders, devices, playing clips and quantization are put back when it ends, when it fails, and when the listener stops playback. It plays what exists: write variant clips first (e.g. ableton_clip_write). Use when the listener is to choose between alternatives by ear; change one thing per variant. Pass commit only after the listener has named their choice: it plays nothing, writes that variant into the set and puts nothing back.",
+		func(_ *ai.ToolContext, input AuditionInput) (AuditionOutput, error) {
+			return runAudition(client, time.Sleep, input)
+		},
+	)
+}
+
 func NewAbletonAuditionAB(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
 	return genkit.DefineTool(g, "ableton_audition_ab",
 		"Ableton Live: audition existing A/B clips or scenes on song time and prompt for a preference — prefer ableton_compare_ab_variation when the B variation still needs to be created",
@@ -272,6 +281,18 @@ func queryCurrentSongTime(client auditionClient) (float64, error) {
 	return songTime, nil
 }
 
+// errTransportStopped says song time will not get anywhere: playback is off.
+var errTransportStopped = &ActionableError{
+	Code:     "transport_stopped",
+	Message:  "playback was stopped in Live while the tool was waiting on song time",
+	NextStep: "Start playback (or let the tool start it) and run it again.",
+}
+
+// transportStallPolls is how many polls song time may stand still (half a
+// second) before the wait asks whether playback is still on. A transport that
+// has only just been told to start needs a moment too.
+const transportStallPolls = 25
+
 func waitUntilSongTime(client auditionClient, sleep auditionSleeper, targetBeats, tempo float64) error {
 	remainingBeats := targetBeats
 	if now, err := queryCurrentSongTime(client); err == nil {
@@ -284,6 +305,7 @@ func waitUntilSongTime(client auditionClient, sleep auditionSleeper, targetBeats
 	timeout := time.Duration((remainingBeats*60/tempo)*2*float64(time.Second)) + 2*time.Second
 	deadline := time.Now().Add(timeout)
 
+	last, stalled := math.Inf(-1), 0
 	for {
 		now, err := queryCurrentSongTime(client)
 		if err != nil {
@@ -291,6 +313,15 @@ func waitUntilSongTime(client auditionClient, sleep auditionSleeper, targetBeats
 		}
 		if now+auditionSongTimeEpsilon >= targetBeats {
 			return nil
+		}
+		if now != last {
+			last, stalled = now, 0
+		} else if stalled++; stalled >= transportStallPolls {
+			// Someone pressed stop. Waiting out the deadline would only keep them waiting.
+			if playing, err := queryAuditionIsPlaying(client); err == nil && !playing {
+				return errTransportStopped
+			}
+			stalled = 0
 		}
 		if time.Now().After(deadline) {
 			return fmt.Errorf("timed out waiting for song time %.3f (last %.3f)", targetBeats, now)

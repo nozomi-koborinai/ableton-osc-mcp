@@ -78,6 +78,7 @@ func Register(g *genkit.Genkit, deps Deps) []ai.Tool {
 		NewAbletonAnalyzeAudioURL(g, deps.ReferenceStore),
 		NewAbletonListReferenceProfiles(g, deps.ReferenceStore),
 		NewAbletonChopDraft(g),
+		NewAbletonAudition(g, c),
 		NewAbletonAuditionAB(g, c),
 
 		// Scenes
