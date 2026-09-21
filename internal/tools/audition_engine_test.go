@@ -357,6 +357,20 @@ func TestAuditionRefusesADeltaFromASilentFader(t *testing.T) {
 	}
 }
 
+func TestAuditionInDBNeedsTheMixerPatch(t *testing.T) {
+	t.Parallel()
+
+	live := newFakeAuditionLive()
+	live.mixer.noPatch = true
+	_, err := runAudition(live, live.sleeper(), AuditionInput{Variants: testVariants()})
+	if !isMixerDBPatchMissing(err) {
+		t.Errorf("error = %v, want mixer_db_patch_missing", err)
+	}
+	if len(live.timeline) != 0 {
+		t.Errorf("Live was touched: %v", live.timeline)
+	}
+}
+
 func TestAuditionPutsLiveBackWhenAStepFails(t *testing.T) {
 	t.Parallel()
 

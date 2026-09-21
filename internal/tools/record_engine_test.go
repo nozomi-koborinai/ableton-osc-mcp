@@ -66,6 +66,23 @@ func newFakeRecorder() *fakeRecorder {
 	}
 }
 
+type auditionCall struct {
+	address string
+	args    []interface{}
+}
+
+func asTestInt(v interface{}) (int, error) {
+	switch n := v.(type) {
+	case int32:
+		return int(n), nil
+	case int64:
+		return int(n), nil
+	case int:
+		return n, nil
+	}
+	return 0, errors.New("not an int")
+}
+
 // commandLatencyBeats is how long a command takes to take effect in the fake.
 const commandLatencyBeats = 0.3
 

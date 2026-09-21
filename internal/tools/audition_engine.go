@@ -49,7 +49,7 @@ type AuditionVariant struct {
 	Description string           `json:"description" jsonschema:"description=The one thing this variant changes\\, in the listener's language (1-60 characters). Shown in Live while it plays"`
 	Clips       []AuditionClip   `json:"clips,omitempty" jsonschema:"description=Clips that play during this variant instead of what the track plays now"`
 	Mix         []AuditionMix    `json:"mix,omitempty" jsonschema:"description=Track volume changes\\, relative to the current level"`
-	Devices     []AuditionDevice `json:"devices,omitempty" jsonschema:"description=Devices switched on or off during this variant"`
+	Devices     []AuditionDevice `json:"devices,omitempty" jsonschema:"description=Devices switched on or off during this variant. Switching an instrument off silences its track"`
 }
 
 type AuditionClip struct {
@@ -95,7 +95,7 @@ type AuditionOutput struct {
 	PlaybackStarted bool             `json:"playback_started,omitempty"`
 	Restored        bool             `json:"restored"`
 	Committed       *AuditionCommit  `json:"committed,omitempty"`
-	Prompt          string           `json:"prompt"`
+	Prompt          string           `json:"prompt,omitempty"`
 }
 
 // auditionOrder is the validated shape of a request.
@@ -688,4 +688,33 @@ func ensureAuditionIndicator(c auditionClient, sleep auditionSleeper) (int, stri
 		}
 	}
 	return index, auditionIndicatorName, nil
+}
+
+// queryDeviceIsActive reads a device's on/off switch (needs the browser patch).
+func queryDeviceIsActive(client oscQuerier, trackIndex, deviceIndex int) (bool, error) {
+	res, err := client.Query("/live/device/get/is_active", int32(trackIndex), int32(deviceIndex))
+	if err != nil {
+		return false, actionable(
+			"device_is_active_unavailable",
+			fmt.Sprintf("could not read is_active for device %d: %v", deviceIndex, err),
+			"Install/update the browser patch (device get/set is_active), then restart Live or send /live/api/reload.",
+		)
+	}
+	if len(res) >= 3 {
+		if status, ok := res[2].(string); ok && status != "" {
+			return false, actionable(
+				"device_is_active_error",
+				fmt.Sprintf("get is_active failed: %s", status),
+				"Check track_index/device_index with ableton_get_track_devices, then retry.",
+			)
+		}
+	}
+	if err := ensureResponseLen(res, 3); err != nil {
+		return false, fmt.Errorf("get is_active: %w", err)
+	}
+	active, err := abletonosc.AsInt(res[2])
+	if err != nil {
+		return false, fmt.Errorf("get is_active: %w", err)
+	}
+	return active != 0, nil
 }

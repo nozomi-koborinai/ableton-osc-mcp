@@ -3,7 +3,6 @@ package tools
 import (
 	"errors"
 	"math"
-	"strings"
 	"testing"
 )
 
@@ -65,30 +64,17 @@ func TestCaptureMixSnapshot(t *testing.T) {
 	}
 }
 
-func TestApplyMixVariationAndRestore(t *testing.T) {
+func TestRestoreMixSnapshotPutsVolumesBack(t *testing.T) {
 	t.Parallel()
 
 	client := &mixABStub{volumes: map[int]float64{0: 0.5, 1: 0.7}}
-	got, err := applyMixVariation(client, ApplyMixVariationInput{
-		Changes: []MixVolumeChange{
-			{TrackIndex: 0, Delta: 0.1},
-			{TrackIndex: 1, Delta: -0.1},
-		},
-	})
+	before, err := captureMixSnapshot(client, nil)
 	if err != nil {
-		t.Fatalf("applyMixVariation() error = %v", err)
+		t.Fatalf("captureMixSnapshot() error = %v", err)
 	}
-	if math.Abs(got.Before.Tracks[0].Volume-0.5) > 1e-6 || math.Abs(got.After.Tracks[0].Volume-0.6) > 1e-6 {
-		t.Errorf("track 0 snapshots = %#v", got)
-	}
-	if math.Abs(client.volumes[1]-0.6) > 1e-6 {
-		t.Errorf("track 1 volume = %v, want 0.6", client.volumes[1])
-	}
-	if !strings.Contains(got.PreferencePrompt, "instrument=mix variation=volume") {
-		t.Errorf("preference_prompt = %q", got.PreferencePrompt)
-	}
+	client.volumes[0], client.volumes[1] = 0.6, 0.6
 
-	restored, err := restoreMixSnapshot(client, got.Before.Tracks)
+	restored, err := restoreMixSnapshot(client, before.Tracks)
 	if err != nil {
 		t.Fatalf("restoreMixSnapshot() error = %v", err)
 	}
@@ -97,40 +83,34 @@ func TestApplyMixVariationAndRestore(t *testing.T) {
 	}
 }
 
-func TestApplyMixVariationRollsBackOnSetFailure(t *testing.T) {
+func TestRestoreMixSnapshotRollsBackOnSetFailure(t *testing.T) {
 	t.Parallel()
 
 	failing := 1
 	client := &mixABStub{
-		volumes:   map[int]float64{0: 0.5, 1: 0.7},
+		volumes:   map[int]float64{0: 0.6, 1: 0.6},
 		failTrack: &failing,
 	}
-	_, err := applyMixVariation(client, ApplyMixVariationInput{
-		Changes: []MixVolumeChange{
-			{TrackIndex: 0, Delta: 0.1},
-			{TrackIndex: 1, Delta: -0.1},
-		},
-	})
+	_, err := restoreMixSnapshot(client, []MixTrackLevel{{TrackIndex: 0, Volume: 0.5}, {TrackIndex: 1, Volume: 0.7}})
 	if err == nil {
-		t.Fatal("applyMixVariation() error = nil, want error")
+		t.Fatal("restoreMixSnapshot() error = nil, want error")
 	}
-	if math.Abs(client.volumes[0]-0.5) > 1e-6 {
-		t.Errorf("track 0 volume = %v, want rollback to 0.5", client.volumes[0])
+	if math.Abs(client.volumes[0]-0.6) > 1e-6 {
+		t.Errorf("track 0 volume = %v, want rollback to 0.6", client.volumes[0])
 	}
 }
 
-func TestApplyMixVariationValidation(t *testing.T) {
+func TestRestoreMixSnapshotValidation(t *testing.T) {
 	t.Parallel()
 
 	client := &mixABStub{volumes: map[int]float64{0: 0.5}}
-	_, err := applyMixVariation(client, ApplyMixVariationInput{})
-	if err == nil {
-		t.Fatal("empty changes should fail")
+	if _, err := restoreMixSnapshot(client, nil); err == nil {
+		t.Fatal("an empty snapshot should fail")
 	}
-	_, err = applyMixVariation(client, ApplyMixVariationInput{
-		Changes: []MixVolumeChange{{TrackIndex: 0, Delta: 0.3}},
-	})
-	if err == nil {
-		t.Fatal("oversized delta should fail")
+	if _, err := restoreMixSnapshot(client, []MixTrackLevel{{TrackIndex: 0, Volume: 1.3}}); err == nil {
+		t.Fatal("a volume outside 0-1 should fail")
+	}
+	if len(client.calls) != 0 {
+		t.Errorf("calls = %v, want nothing sent", client.calls)
 	}
 }

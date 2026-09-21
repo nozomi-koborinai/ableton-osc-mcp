@@ -79,7 +79,6 @@ func Register(g *genkit.Genkit, deps Deps) []ai.Tool {
 		NewAbletonListReferenceProfiles(g, deps.ReferenceStore),
 		NewAbletonChopDraft(g),
 		NewAbletonAudition(g, c),
-		NewAbletonAuditionAB(g, c),
 
 		// Scenes
 		NewAbletonFireScene(g, c),
@@ -124,7 +123,6 @@ func Register(g *genkit.Genkit, deps Deps) []ai.Tool {
 		NewAbletonLoadOnMaster(g, c),
 		NewAbletonAutogainTracks(g, c),
 		NewAbletonCaptureMixSnapshot(g, c),
-		NewAbletonApplyMixVariation(g, c),
 		NewAbletonRestoreMixSnapshot(g, c),
 
 		// Bounce / Session Record
@@ -136,7 +134,6 @@ func Register(g *genkit.Genkit, deps Deps) []ai.Tool {
 		// Recipes
 		NewAbletonSetupDrumTrack(g, c),
 		NewAbletonCompareABVariation(g, c),
-		NewAbletonCompareFXBypass(g, c),
 
 		// A/B comparison feedback
 		NewAbletonRecordVariationPreference(g, deps.TasteStore),
