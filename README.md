@@ -20,9 +20,10 @@ This enables AI assistants (Claude, Cursor, etc.) to interact with Ableton Live 
 - Browse Live Browser folders by path and load items onto tracks
 - Search the local synced Splice library and load samples onto audio tracks (Live 12.0.5+)
 - Set up a drum track with kit + clip + pattern in one recipe
+- Audition 2–8 labelled variants back to back on bar lines — other clips, track volume changes in dB, devices on or off — with the current state (X) in the line-up, everything put back afterwards, and the winner written in on request (`ableton_audition`)
 - Run drum / bass / scene A/B comparisons through one create→audition recipe, then save taste locally
-- A/B the same clip dry vs processed by bypassing FX (`ableton_compare_fx_bypass`)
-- Compare mix balance with snapshots you can restore
+- Keep what the listener chose, next to what they chose it over (`ableton_record_audition_choice`)
+- Capture and restore track volumes as mix snapshots
 - Match an audio clip to the project tempo with Warp (e.g. after loading a sample)
 - Analyze a local `.wav`/`.aif`, or reference-analyze an `http(s)`/YouTube URL, for duration, levels, BPM/key alternatives, chords, section map, rhythm density, rms_per_beat, band balance, match axes, texture, and a mix profile (integrated LUFS, true peak, crest, 9-band spectrum, per-band stereo width) (URL streams in memory and is never saved; no melody extraction)
 - Save a track's mix profile as a named reference (numbers only, never audio) and compare your own bounce against a weighted blend of references
@@ -259,23 +260,71 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 > **Note**: Replace `/opt/homebrew/bin/ableton-osc-mcp` with your actual binary path if different.
 
-## A/B comparison workflow
+## Audition workflow
 
-For the usual drum, bass, or scene listen-and-choose loop, start here:
+Decisions about a beat are made by ear, and the format that works is always the
+same: the current state (X) next to a few variants that each change **one**
+thing, played back to back, answered with one letter.
+
+1. Make the variants. Clips have to exist before they can be played: write them
+   with `ableton_clip_write` (or a variation tool) into free slots. Volume and
+   device variants need nothing prepared.
+2. `ableton_audition` — pass the variants, each with a short `label` and a
+   `description` of the one thing it changes. A variant may name clips to play
+   instead (`clips`), track volume changes relative to now (`mix`, `delta_db`),
+   and devices to switch on or off (`devices`). A variant that names nothing is
+   X, the current state.
+3. Ask the listener which came closest. They answer with a label.
+4. Optional: `ableton_audition` again with `commit` set to that label. It plays
+   nothing, writes the variant into the set, and that state is X from then on.
+   Then `ableton_record_audition_choice` keeps the choice, with everything it
+   was chosen over, in the taste profile.
+
+```jsonc
+// ableton_audition
+{
+  "bars_per_variant": 4,
+  "variants": [
+    { "label": "X", "description": "as it is" },
+    { "label": "A", "description": "808 bounces on the and of 2", "clips": [{ "track_index": 2, "clip_index": 3 }] },
+    { "label": "B", "description": "chords 3 dB down", "mix": [{ "track_index": 4, "delta_db": -3 }] },
+    { "label": "C", "description": "lead without the chorus", "devices": [{ "track_index": 5, "device_index": 1, "active": false }] }
+  ]
+}
+```
+
+What it does in Live, so nothing comes as a surprise:
+
+- It runs in real time and blocks until it is done: `play` × `bars_per_variant`
+  bars, after up to a bar of waiting for the next bar line. `play` picks the
+  order (`["A"]` to hear one again, `["J", "K", "J", "K"]` to alternate).
+- Every variant is built from the state before the audition, never from the
+  variant before it, so nothing leaks from one into the next.
+- Clips switch on the bar line (1-bar launch quantization for the duration).
+  Faders and devices are sent a moment early and land 40–140 ms before the line
+  (measured on Live 11), so the downbeat already sounds like the new variant.
+- It adds one audio track named `Audition` at the end of the set. While a
+  variant sounds its name reads `Audition ▶ B: chords 3 dB down`. It is never
+  selected, and you can move it wherever you like.
+- When it ends, when a step fails, and when the listener stops playback halfway,
+  faders, devices, playing clips and launch quantization are put back.
+- All checks happen before anything moves: a missing clip or device
+  (`audition_target_missing`), a dB change from a silent fader
+  (`delta_from_silence`) or beyond the fader's range (`level_out_of_range`).
+  dB changes need the dB mixer handlers of the patch.
+
+For the drum / bass / scene variations this server can generate itself there is
+a one-call recipe on the same engine:
 
 1. Optional: `ableton_get_taste_profile` — see what to try next
-2. `ableton_compare_ab_variation` — create one-axis B, audition A→B, get a preference prompt
+2. `ableton_compare_ab_variation` — create one-axis B, play A→B, get a preference prompt
 3. Ask the listener which they prefer, then `ableton_record_variation_preference`
-
-Keep the lower-level tools for special cases:
 
 | When you need… | Use |
 |---|---|
 | Create B without auditioning yet | `ableton_create_scene_energy_variation` |
-| Audition clips/scenes that already exist | `ableton_audition_ab` |
-| Mix balance A/B (volume deltas in dB + restore) | `ableton_apply_mix_variation` → listen → record preference → `ableton_restore_mix_snapshot` |
-
-Mix is intentionally outside `ableton_compare_ab_variation` because it uses snapshots, not clip/scene slots.
+| Compare anything that already exists: clips, levels, devices, 2 to 8 ways | `ableton_audition` |
+| Keep a set of fader positions to come back to later | `ableton_capture_mix_snapshot` → … → `ableton_restore_mix_snapshot` |
 
 ## Audio analysis
 
@@ -387,12 +436,12 @@ sharing a position, so a block-chord sketch is a few lines of text.
 | `ableton_analyze_local_audio` | Analyze a local `.wav`/`.aif` (BPM/key alternatives, density, rms_per_beat, band_balance, match_axes, sections, onset grid, texture, mix_profile). Optional window, `references` to compare against saved profiles, `save_reference_as` to keep the numbers. Rejects URLs; no melody/note extraction |
 | `ableton_analyze_audio_url` | Reference-analyze an `http(s)`/YouTube URL (same production fields and mix_profile as local, minus the full onset list). Optional window and `save_reference_as`. Streams via yt-dlp+ffmpeg in memory; requires yt-dlp+ffmpeg |
 | `ableton_list_reference_profiles` | List saved reference mix profiles (name, source, LUFS, crest, 9 bands) |
-| `ableton_compare_ab_variation` | Preferred A/B entry: create one drum/bass/scene variation, audition A→B, return a preference prompt |
-| `ableton_compare_fx_bypass` | Same-clip FX A/B: bypass audio/MIDI effects (dry) then restore prior active state (wet); record with `instrument=fx variation=bypass` |
+| `ableton_audition` | Play 2–8 labelled variants back to back on bar lines (clips, track volume deltas in dB, devices on/off), show which one is sounding on an `Audition` track, put everything back; `commit` writes the chosen one in (real time) |
+| `ableton_record_audition_choice` | Keep what the listener chose in an audition, with every option they heard and their own words |
+| `ableton_compare_ab_variation` | One-call A/B for generated variations: create one drum/bass/scene variation, play A→B on the audition engine, return a preference prompt |
 | `ableton_create_scene_energy_variation` | Create-only scene energy variation (lift / pullback); keeps B if fire fails |
-| `ableton_audition_ab` | Audition existing A/B clips or scenes on Live song time |
-| `ableton_record_variation_preference` | Save whether the source or variation matched your taste (drum, bass, scene, or mix) |
-| `ableton_get_taste_profile` | Summarize saved A/B choices and suggest the next comparison |
+| `ableton_record_variation_preference` | Save whether the source or variation matched your taste (drum, bass, scene, mix, or fx) |
+| `ableton_get_taste_profile` | Summarize saved A/B choices, list the last ten audition choices, and suggest the next comparison |
 | `ableton_fire_clip_slot` / `ableton_stop_clip` | Fire/stop a clip |
 | `ableton_duplicate_clip_to` | Duplicate clip to another slot (same track, or cross-track via `target_track_index`) |
 | `ableton_delete_clip` | Delete a clip from a slot (requires `confirm=true` when a clip is present) |
@@ -438,8 +487,7 @@ sharing a position, so a block-chord sketch is a few lines of text.
 | `ableton_load_splice_sample` | Load a local Splice audio file into an empty audio-track clip slot (Live 12.0.5+, patch) |
 | `ableton_get_track_meter` | Track output meter levels |
 | `ableton_autogain_tracks` | Iteratively adjust track volumes toward a target meter level |
-| `ableton_apply_mix_variation` | Mix A/B entry: apply small B volume changes and return the A snapshot |
-| `ableton_capture_mix_snapshot` / `ableton_restore_mix_snapshot` | Capture or restore track volumes for mix A/B |
+| `ableton_capture_mix_snapshot` / `ableton_restore_mix_snapshot` | Capture track volumes and come back to them later (an audition puts its own faders back) |
 | `ableton_get_master_meter` / `ableton_get_master_volume` / `ableton_set_master_volume` | Master meter/volume, raw or in dB (requires master patch) |
 | `ableton_get_master_devices` / `ableton_get_master_device_parameters` / `ableton_set_master_device_parameter` | Master devices (requires master patch) |
 | `ableton_load_on_master` | Load Browser item onto master (requires browser+master patch) |
@@ -459,7 +507,10 @@ Once configured, you can ask your AI assistant:
 - "Compare a drum groove variation of clip 0 into empty slot 1, then ask which I prefer"
 - "Check my taste profile and run the least-tried bass comparison next"
 - "I prefer the variation; save that and suggest what to compare next"
-- "Create a mix B with the bass 1.5 dB lower, let me listen, then restore A"
+- "Let me hear the 808 as it is, 2 dB down and 4 dB down, four bars each, and I'll tell you which"
+- "Write three hat patterns into free slots and audition them against what's playing now"
+- "Play me the lead with and without the chorus — then J and K again, back to back"
+- "B it is. Write it in and remember that I picked it"
 - "Turn the 808 down 2 dB and set the pad to -24 dB"
 - "Humanize the drum clip with a bit of swing"
 - "Warp that audio sample to the project tempo"
@@ -507,7 +558,7 @@ In most cases, the default settings work fine. Change these only if:
 | `ABLETON_OSC_PORT` | `11000` | AbletonOSC listen port |
 | `ABLETON_OSC_CLIENT_PORT` | `11001` | Port for receiving replies |
 | `ABLETON_OSC_TIMEOUT_MS` | `500` | Query timeout in milliseconds |
-| `ABLETON_OSC_TASTE_PROFILE_PATH` | OS user config directory / `ableton-osc-mcp/taste-profile.json` | Local path for saved A/B preferences |
+| `ABLETON_OSC_TASTE_PROFILE_PATH` | OS user config directory / `ableton-osc-mcp/taste-profile.json` | Local path for saved A/B preferences and audition choices |
 | `ABLETON_OSC_REFERENCE_PROFILES_PATH` | OS user config directory / `ableton-osc-mcp/reference-profiles.json` | Local path for saved reference mix profiles (numbers only) |
 | `ABLETON_OSC_SPLICE_PATH` | _(auto: `~/Splice` or `~/Documents/Splice`)_ | Local Splice content folder for sample search/load |
 
