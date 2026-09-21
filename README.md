@@ -27,6 +27,7 @@ This enables AI assistants (Claude, Cursor, etc.) to interact with Ableton Live 
 - Match an audio clip to the project tempo with Warp (e.g. after loading a sample)
 - Analyze a local `.wav`/`.aif`, or reference-analyze an `http(s)`/YouTube URL, for duration, levels, BPM/key alternatives, chords, section map, rhythm density, rms_per_beat, band balance, match axes, texture, and a mix profile (integrated LUFS, true peak, crest, 9-band spectrum, per-band stereo width) (URL streams in memory and is never saved; no melody extraction)
 - Save a track's mix profile as a named reference (numbers only, never audio) and compare your own bounce against a weighted blend of references
+- Turn a bounce into a delivery file — 44.1 kHz / 24-bit WAV under a true-peak ceiling, with gain only — and get it checked: clipped source, cut-off ending, true peak (`ableton_finalize_audio`, works without Live)
 - Measure what Live is putting out — LUFS, true peak, crest, 9 bands, stereo width — from a Resampling pass, against saved references and per track group (`ableton_measure_mix`); no export dialog, no screen automation
 - Autogain tracks toward a target meter level while audio is playing
 - Diagnose AbletonOSC connection and browser/master patch readiness
@@ -435,6 +436,7 @@ sharing a position, so a block-chord sketch is a few lines of text.
 | `ableton_match_clip_tempo` | Enable Warp on an audio clip so it follows the project tempo (`beats` or `complex`) |
 | `ableton_analyze_local_audio` | Analyze a local `.wav`/`.aif` (BPM/key alternatives, density, rms_per_beat, band_balance, match_axes, sections, onset grid, texture, mix_profile). Optional window, `references` to compare against saved profiles, `save_reference_as` to keep the numbers. Rejects URLs; no melody/note extraction |
 | `ableton_analyze_audio_url` | Reference-analyze an `http(s)`/YouTube URL (same production fields and mix_profile as local, minus the full onset list). Optional window and `save_reference_as`. Streams via yt-dlp+ffmpeg in memory; requires yt-dlp+ffmpeg |
+| `ableton_finalize_audio` | Turn a recording (.wav/.aif) into a delivery WAV: tail trimmed, DC out, fade-out, 44.1/48 kHz, 24/16 bit, level set against a true-peak ceiling with gain only; never touches the source; reports what the written file measures and what speaks against handing it in |
 | `ableton_list_reference_profiles` | List saved reference mix profiles (name, source, LUFS, crest, 9 bands) |
 | `ableton_audition` | Play 2–8 labelled variants back to back on bar lines (clips, track volume deltas in dB, devices on/off), show which one is sounding on an `Audition` track, put everything back; `commit` writes the chosen one in (real time) |
 | `ableton_record_audition_choice` | Keep what the listener chose in an audition, with every option they heard and their own words |

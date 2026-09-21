@@ -64,6 +64,7 @@ var toolHints = map[string]hints{
 	"ableton_duplicate_track_for_processing": {},
 	"ableton_extract_clip_region":            {},
 	"ableton_find_browser_item":              {readOnly: true},
+	"ableton_finalize_audio":                 {},
 	"ableton_fire_clip_slot":                 {},
 	"ableton_fire_scene":                     {},
 	"ableton_get_clip_envelope":              {readOnly: true},
