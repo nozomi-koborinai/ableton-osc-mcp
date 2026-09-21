@@ -137,6 +137,7 @@ func Register(g *genkit.Genkit, deps Deps) []ai.Tool {
 
 		// A/B comparison feedback
 		NewAbletonRecordVariationPreference(g, deps.TasteStore),
+		NewAbletonRecordAuditionChoice(g, deps.TasteStore),
 		NewAbletonGetTasteProfile(g, deps.TasteStore),
 
 		// Raw OSC

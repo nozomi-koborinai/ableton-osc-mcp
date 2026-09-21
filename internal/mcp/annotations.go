@@ -105,6 +105,7 @@ var toolHints = map[string]hints{
 	"ableton_osc_send":                       {destructive: true, idempotent: true},
 	"ableton_play":                           {idempotent: true},
 	"ableton_preview_destructive":            {readOnly: true},
+	"ableton_record_audition_choice":         {},
 	"ableton_record_variation_preference":    {idempotent: true},
 	"ableton_restore_mix_snapshot":           {idempotent: true},
 	"ableton_save_slice_preset":              {idempotent: true},
