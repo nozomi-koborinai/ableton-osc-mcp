@@ -47,6 +47,13 @@ func estimateDrumGrid(samples []float64, sampleRate int, grid BeatGrid) (DrumGri
 	if grid.Bars < drumMinBars || sampleRate <= 0 {
 		return DrumGrid{}, false
 	}
+	return estimateDrumGridFrom(onsetEnvelopes(samples, sampleRate), sampleRate, grid)
+}
+
+func estimateDrumGridFrom(onsets onsetLanes, sampleRate int, grid BeatGrid) (DrumGrid, bool) {
+	if grid.Bars < drumMinBars || sampleRate <= 0 {
+		return DrumGrid{}, false
+	}
 	stepSec := grid.beatSec() / (drumStepsPerBar / beatsPerBar)
 	cycleSteps := drumStepsPerBar * drumCycleBars
 	rounds := grid.Bars / drumCycleBars
@@ -57,8 +64,7 @@ func estimateDrumGrid(samples []float64, sampleRate int, grid BeatGrid) (DrumGri
 		{Name: "mid", Hears: "the crack of snares, claps and rims; a loud vocal muddies this lane"},
 		{Name: "high", Hears: "hats and shakers"},
 	}
-	low, mid, high := onsetEnvelopes(samples, sampleRate)
-	for l, envelope := range [][]float64{low, mid, high} {
+	for l, envelope := range [][]float64{onsets.low, onsets.mid, onsets.high} {
 		values := make([]float64, rounds*cycleSteps)
 		for n := range values {
 			centre := int(math.Round(((grid.DownbeatSec+float64(n)*stepSec)*float64(sampleRate) - fluxFrameSize/2) / fluxHopSize))

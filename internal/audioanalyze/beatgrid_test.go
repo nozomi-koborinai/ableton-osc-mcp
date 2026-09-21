@@ -165,3 +165,56 @@ func TestBeatGridSettlesOnTheTempoWhoseSixteenthsTheOnsetsSitOn(t *testing.T) {
 		}
 	}
 }
+
+// A project tempo is taken as it is, whatever it is: the search for related
+// tempos keeps to 60-200 BPM, and that range must not apply to a tempo that is
+// known. At 220 BPM the beats still have to be found, not left at zero.
+func TestBeatGridFindsTheBeatsOfAFastProjectTempo(t *testing.T) {
+	t.Parallel()
+
+	beat := defaultTestBeat()
+	beat.bpm = 220
+	grid, ok := buildBeatGrid(beat.render(), beat.sampleRate, beatGridOptions{BPM: 220, ExactTempo: true})
+	if !ok || grid.BPM != 220 {
+		t.Fatalf("grid = %+v, ok = %v", grid, ok)
+	}
+	beatSec := 60 / 220.0
+	if off := math.Mod(grid.BeatOffsetSec-beat.offsetSec+100*beatSec, beatSec); math.Min(off, beatSec-off) > 0.015 {
+		t.Errorf("beats at %.3f s + k x %.3f, want them on %.3f s", grid.BeatOffsetSec, beatSec, beat.offsetSec)
+	}
+}
+
+// Nothing in here may fall over on a rate it was not tuned for: bands that lie
+// beyond Nyquist are simply empty.
+func TestDeepAnalysisSurvivesUnusualSampleRates(t *testing.T) {
+	t.Parallel()
+
+	for _, rate := range []int{8000, 22050, 96000} {
+		beat := defaultTestBeat()
+		beat.sampleRate, beat.bars = rate, 4
+		samples := beat.render()
+		tuning := estimateTuning(samples, rate)
+		grid, ok := buildBeatGrid(samples, rate, beatGridOptions{BPM: 140, ExactTempo: true, DownbeatSec: beat.offsetSec, DownbeatSet: true, TuningCents: tuning.correction()})
+		if !ok {
+			t.Errorf("%d Hz: no grid", rate)
+			continue
+		}
+		if _, ok := estimateHarmony(samples, rate, grid, tuning.correction(), KeyResult{}, false); !ok {
+			t.Errorf("%d Hz: no harmony", rate)
+		}
+		drums, ok := estimateDrumGrid(samples, rate, grid)
+		if !ok || drums.Lanes[0].Pattern != "x.....x.....x...|...x......x....." {
+			t.Errorf("%d Hz: drum grid = %+v", rate, drums)
+		}
+	}
+	// And on nothing at all.
+	silence := make([]float64, 10*44100)
+	if grid, ok := buildBeatGrid(silence, 44100, beatGridOptions{BPM: 120}); ok {
+		if _, ok := estimateHarmony(silence, 44100, grid, 0, KeyResult{}, false); !ok {
+			t.Error("silence: harmony should still answer, with N.C.")
+		}
+		if drums, ok := estimateDrumGrid(silence, 44100, grid); !ok || drums.Lanes[0].Pattern != emptyDrumPattern() {
+			t.Errorf("silence: drum grid = %+v", drums)
+		}
+	}
+}

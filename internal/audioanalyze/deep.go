@@ -19,7 +19,8 @@ func analyzeDeep(out *Result, mono []float64, sampleRate int, opts Options, esti
 	if gridOptions.BPM <= 0 {
 		return "No beat grid: no tempo could be estimated. Pass project_tempo when the tempo is known."
 	}
-	grid, ok := buildBeatGrid(mono, sampleRate, gridOptions)
+	onsets := onsetEnvelopes(mono, sampleRate) // once: the grid and the drum grid read the same envelopes
+	grid, ok := buildBeatGridFrom(onsets, mono, sampleRate, gridOptions)
 	if !ok {
 		return fmt.Sprintf("No beat grid: the audio holds fewer than %d bars at %.1f BPM.", beatGridMinBars, gridOptions.BPM)
 	}
@@ -27,7 +28,7 @@ func analyzeDeep(out *Result, mono []float64, sampleRate int, opts Options, esti
 	if harmony, ok := estimateHarmony(mono, sampleRate, grid, tuningCents, key, keyOK); ok {
 		out.Harmony = &harmony
 	}
-	if drums, ok := estimateDrumGrid(mono, sampleRate, grid); ok {
+	if drums, ok := estimateDrumGridFrom(onsets, sampleRate, grid); ok {
 		out.DrumGrid = &drums
 	}
 	note := ""

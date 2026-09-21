@@ -136,12 +136,16 @@ func highPassBiquad(cutoffHz float64, sampleRate int) biquad {
 	return biquad{b0: (1 + cos) / 2 / a0, b1: -(1 + cos) / a0, b2: (1 + cos) / 2 / a0, a1: -2 * cos / a0, a2: (1 - alpha) / a0}
 }
 
-// onsetEnvelopes are the three lanes everything rhythmic is read from, each
-// scaled to its own strongest onset.
-func onsetEnvelopes(samples []float64, sampleRate int) (low, mid, high []float64) {
+// onsetLanes are the three envelopes everything rhythmic is read from, each
+// scaled to its own strongest onset. They are worked out once per analysis.
+type onsetLanes struct {
+	low, mid, high []float64
+}
+
+func onsetEnvelopes(samples []float64, sampleRate int) onsetLanes {
 	fluxes := bandFluxes(samples, sampleRate, fluxBandMid, fluxBandHigh)
-	low, mid, high = lowOnsetEnvelope(samples, sampleRate), fluxes[0], fluxes[1]
-	for _, envelope := range [][]float64{low, mid, high} {
+	lanes := onsetLanes{low: lowOnsetEnvelope(samples, sampleRate), mid: fluxes[0], high: fluxes[1]}
+	for _, envelope := range [][]float64{lanes.low, lanes.mid, lanes.high} {
 		strongest := 0.0
 		for _, v := range envelope {
 			strongest = math.Max(strongest, v)
@@ -152,7 +156,7 @@ func onsetEnvelopes(samples []float64, sampleRate int) (low, mid, high []float64
 			}
 		}
 	}
-	return low, mid, high
+	return lanes
 }
 
 // envelopeAt reads an envelope at a time in seconds, taking the largest of the
@@ -174,16 +178,23 @@ func buildBeatGrid(samples []float64, sampleRate int, opts beatGridOptions) (Bea
 	if sampleRate <= 0 || opts.BPM <= 0 {
 		return BeatGrid{}, false
 	}
+	return buildBeatGridFrom(onsetEnvelopes(samples, sampleRate), samples, sampleRate, opts)
+}
+
+func buildBeatGridFrom(lanes onsetLanes, samples []float64, sampleRate int, opts beatGridOptions) (BeatGrid, bool) {
+	if sampleRate <= 0 || opts.BPM <= 0 {
+		return BeatGrid{}, false
+	}
 	durationSec := float64(len(samples)) / float64(sampleRate)
 	if durationSec < float64(beatGridMinBars*beatsPerBar)*60/opts.BPM {
 		return BeatGrid{}, false
 	}
-	low, mid, _ := onsetEnvelopes(samples, sampleRate)
+	low := lanes.low
 	// Kicks and snares sit on the beats; hats fill the gaps evenly and would pull
 	// the grid on to the off-beats as easily as on to the beats.
 	pulse := make([]float64, len(low))
 	for i := range pulse {
-		pulse[i] = low[i] + mid[i]
+		pulse[i] = low[i] + lanes.mid[i]
 	}
 
 	grid := BeatGrid{BPM: opts.BPM}
@@ -196,15 +207,20 @@ func buildBeatGrid(samples []float64, sampleRate int, opts beatGridOptions) (Bea
 		// thirds, on a swung drill beat). Each related tempo gets its best grid, and
 		// the one whose sixteenths the onsets actually sit on wins; the estimate
 		// itself stays unless another is clearly better.
-		_, _, high := onsetEnvelopes(samples, sampleRate)
 		everything := make([]float64, len(pulse))
 		for i := range everything {
-			everything[i] = pulse[i] + high[i]
+			everything[i] = pulse[i] + lanes.high[i]
 		}
 		bestFit := -1.0
 		for _, ratio := range []float64{1, 1.5, 2.0 / 3, 0.75, 4.0 / 3, 2, 0.5} {
 			centre := opts.BPM * ratio
-			if opts.ExactTempo && ratio != 1 || centre < beatMinTempo || centre > beatMaxTempo {
+			// A tempo that is known is taken as it is, whatever it is. The range only
+			// keeps the search for a related tempo among tempos music is counted in,
+			// and the estimate itself is always a candidate.
+			if opts.ExactTempo && ratio != 1 {
+				continue
+			}
+			if ratio != 1 && (centre < beatMinTempo || centre > beatMaxTempo) {
 				continue
 			}
 			bpm, phase := combBeats(pulse, sampleRate, durationSec, centre, opts.ExactTempo)
