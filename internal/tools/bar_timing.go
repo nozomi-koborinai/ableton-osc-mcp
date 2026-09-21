@@ -142,6 +142,9 @@ func queryCurrentSongTime(client auditionClient) (float64, error) {
 	return songTime, nil
 }
 
+// songTimeFinalStretch is the part of a wait that is slept, not polled.
+const songTimeFinalStretch = 300 * time.Millisecond
+
 // errTransportStopped says song time will not get anywhere: playback is off.
 var errTransportStopped = &ActionableError{
 	Code:     "transport_stopped",
@@ -149,10 +152,12 @@ var errTransportStopped = &ActionableError{
 	NextStep: "Start playback (or let the tool start it) and run it again.",
 }
 
-// transportStallPolls is how many polls song time may stand still (half a
-// second) before the wait asks whether playback is still on. A transport that
-// has only just been told to start needs a moment too.
-const transportStallPolls = 25
+// transportStallPolls is how many polls in a row song time may stand still
+// before the wait asks whether playback is still on. A poll is a round trip to
+// Live, which answers on a timer of about a tenth of a second, so this is
+// roughly half a second: long enough for a transport that has only just been
+// told to start (measured on Live 11: 25 polls took 2.9 s).
+const transportStallPolls = 5
 
 func waitUntilSongTime(client auditionClient, sleep auditionSleeper, targetBeats, tempo float64) error {
 	remainingBeats := targetBeats
@@ -186,6 +191,13 @@ func waitUntilSongTime(client auditionClient, sleep auditionSleeper, targetBeats
 		}
 		if time.Now().After(deadline) {
 			return fmt.Errorf("timed out waiting for song time %.3f (last %.3f)", targetBeats, now)
+		}
+		// A poll is a round trip of about a tenth of a second, so polling up to the
+		// target overshoots it by as much (measured: a fader sent "150 ms ahead" of
+		// a bar line arrived 50 ms after it). The last stretch is slept in one go.
+		if remaining := time.Duration((targetBeats - now) * 60 / tempo * float64(time.Second)); remaining <= songTimeFinalStretch {
+			sleep(remaining)
+			return nil
 		}
 		sleep(auditionPollInterval)
 	}
