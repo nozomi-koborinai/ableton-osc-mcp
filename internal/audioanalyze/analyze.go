@@ -96,6 +96,7 @@ type Result struct {
 	Scale             string            `json:"scale,omitempty"`
 	KeyConfidence     float64           `json:"key_confidence,omitempty"`
 	KeyAlternatives   []KeyHypothesis   `json:"key_alternatives,omitempty"`
+	Tuning            *Tuning           `json:"tuning,omitempty"`
 	ChordProgression  []ChordSegment    `json:"chord_progression,omitempty"`
 	ChordSummary      string            `json:"chord_summary,omitempty"`
 	Sections          []Section         `json:"sections,omitempty"`
@@ -215,7 +216,9 @@ func analyzeStream(r io.Reader, opts Options) (Result, error) {
 		OnsetCount:        onsets,
 		SuggestedWarpMode: warpMode,
 	}
-	if key, ok := estimateKey(analyze, sampleRate); ok {
+	tuning := estimateTuning(analyze, sampleRate)
+	out.Tuning = &tuning
+	if key, ok := estimateKey(analyze, sampleRate, tuning.correction()); ok {
 		out.Key = key.Tonic
 		out.Scale = key.Scale
 		out.KeyConfidence = key.Confidence
@@ -229,7 +232,7 @@ func analyzeStream(r io.Reader, opts Options) (Result, error) {
 		}
 		out.KeyAlternatives = alts
 	}
-	if chords, summary, ok := estimateChords(analyze, sampleRate); ok {
+	if chords, summary, ok := estimateChords(analyze, sampleRate, tuning.correction()); ok {
 		out.ChordProgression = chords
 		out.ChordSummary = summary
 	}

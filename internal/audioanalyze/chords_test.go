@@ -10,7 +10,7 @@ func TestClassifyChordCMajor(t *testing.T) {
 
 	// C, E, G -> C major.
 	samples := tones(44100, 2, 261.63, 329.63, 392.0)
-	chroma := chromagram(samples, 44100)
+	chroma := chromagram(samples, 44100, 0)
 	chord, conf := classifyChord(chroma)
 	if chord != "C" {
 		t.Fatalf("chord = %s (conf %.2f), want C", chord, conf)
@@ -22,7 +22,7 @@ func TestClassifyChordAMinor(t *testing.T) {
 
 	// A, C, E -> A minor.
 	samples := tones(44100, 2, 440.0, 523.25, 659.25)
-	chroma := chromagram(samples, 44100)
+	chroma := chromagram(samples, 44100, 0)
 	chord, conf := classifyChord(chroma)
 	if chord != "Am" {
 		t.Fatalf("chord = %s (conf %.2f), want Am", chord, conf)
@@ -38,7 +38,7 @@ func TestEstimateChordsProgression(t *testing.T) {
 	samples = append(samples, tones(sr, 2, 261.63, 329.63, 392.0)...)
 	samples = append(samples, tones(sr, 2, 392.0, 493.88, 587.33)...)
 
-	segs, summary, ok := estimateChords(samples, sr)
+	segs, summary, ok := estimateChords(samples, sr, 0)
 	if !ok || len(segs) == 0 {
 		t.Fatal("estimateChords returned no result")
 	}
@@ -64,7 +64,7 @@ func TestEstimateChordsSilenceIsNoChord(t *testing.T) {
 	t.Parallel()
 
 	samples := make([]float64, 44100*2)
-	segs, summary, ok := estimateChords(samples, 44100)
+	segs, summary, ok := estimateChords(samples, 44100, 0)
 	if !ok {
 		t.Fatal("expected ok for long-enough input")
 	}

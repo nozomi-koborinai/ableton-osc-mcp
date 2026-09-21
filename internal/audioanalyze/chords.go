@@ -28,8 +28,8 @@ type ChordSegment struct {
 // estimateChords returns a merged chord progression and a compact summary
 // string (e.g. "C | G | Am | F"). It returns ok=false when the audio is too
 // short to segment.
-func estimateChords(samples []float64, sampleRate int) ([]ChordSegment, string, bool) {
-	frames := frameChromas(samples, sampleRate)
+func estimateChords(samples []float64, sampleRate int, tuningCents float64) ([]ChordSegment, string, bool) {
+	frames := frameChromasTuned(samples, sampleRate, tuningCents)
 	if len(frames) == 0 || sampleRate <= 0 {
 		return nil, "", false
 	}

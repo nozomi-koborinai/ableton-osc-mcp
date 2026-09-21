@@ -34,7 +34,7 @@ func TestEstimateKeyCMajorTriad(t *testing.T) {
 
 	// C4, E4, G4 sustained -> should read as C major.
 	samples := tones(44100, 5, 261.63, 329.63, 392.0)
-	got, ok := estimateKey(samples, 44100)
+	got, ok := estimateKey(samples, 44100, 0)
 	if !ok {
 		t.Fatal("estimateKey returned ok=false")
 	}
@@ -53,7 +53,7 @@ func TestEstimateKeyGMajorScale(t *testing.T) {
 	for _, f := range freqs {
 		samples = append(samples, tones(sr, 1, f)...)
 	}
-	got, ok := estimateKey(samples, sr)
+	got, ok := estimateKey(samples, sr, 0)
 	if !ok {
 		t.Fatal("estimateKey returned ok=false")
 	}

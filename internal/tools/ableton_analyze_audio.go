@@ -38,6 +38,7 @@ type AnalyzeLocalAudioOutput struct {
 	Scale             string                         `json:"scale,omitempty"`
 	KeyConfidence     float64                        `json:"key_confidence,omitempty"`
 	KeyAlternatives   []audioanalyze.KeyHypothesis   `json:"key_alternatives,omitempty"`
+	Tuning            *audioanalyze.Tuning           `json:"tuning,omitempty"`
 	ChordProgression  []audioanalyze.ChordSegment    `json:"chord_progression,omitempty"`
 	ChordSummary      string                         `json:"chord_summary,omitempty"`
 	Sections          []audioanalyze.Section         `json:"sections,omitempty"`
@@ -110,6 +111,7 @@ func analyzeLocalAudio(input AnalyzeLocalAudioInput, store referenceStore) (Anal
 		Scale:             got.Scale,
 		KeyConfidence:     got.KeyConfidence,
 		KeyAlternatives:   got.KeyAlternatives,
+		Tuning:            got.Tuning,
 		ChordProgression:  got.ChordProgression,
 		ChordSummary:      got.ChordSummary,
 		Sections:          got.Sections,
