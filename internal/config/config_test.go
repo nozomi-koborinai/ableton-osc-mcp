@@ -1,6 +1,8 @@
 package config
 
 import (
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -74,5 +76,19 @@ func TestLoadInvalidEnvFallsBackToDefaults(t *testing.T) {
 	}
 	if cfg.Timeout != 500*time.Millisecond {
 		t.Errorf("Timeout = %v, want %v (default)", cfg.Timeout, 500*time.Millisecond)
+	}
+}
+
+func TestLoadReferenceProfilesPath(t *testing.T) {
+	t.Setenv("ABLETON_OSC_REFERENCE_PROFILES_PATH", "")
+	got := Load().ReferenceProfilesPath
+	want := filepath.Join("ableton-osc-mcp", "reference-profiles.json")
+	if !strings.HasSuffix(got, want) {
+		t.Errorf("default ReferenceProfilesPath = %q, want it to end with %q", got, want)
+	}
+
+	t.Setenv("ABLETON_OSC_REFERENCE_PROFILES_PATH", "/tmp/my-refs.json")
+	if got := Load().ReferenceProfilesPath; got != "/tmp/my-refs.json" {
+		t.Errorf("ReferenceProfilesPath from env = %q, want /tmp/my-refs.json", got)
 	}
 }

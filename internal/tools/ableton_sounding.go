@@ -22,6 +22,7 @@ type SoundingTrack struct {
 	Name              string           `json:"name"`
 	Mute              bool             `json:"mute"`
 	Solo              bool             `json:"solo"`
+	VolumeDB          string           `json:"volume_db,omitempty" jsonschema:"description=Track volume as Live shows it\\, e.g. -6.0 dB (needs the dB mixer patch)"`
 	PlayingSlotIndex  int              `json:"playing_slot_index" jsonschema:"description=-1 when nothing is playing on this track"`
 	Devices           []SoundingDevice `json:"devices"`
 	ClipSlotsOccupied []int            `json:"clip_slots_occupied" jsonschema:"description=Scene indices that currently have a clip"`
@@ -185,13 +186,21 @@ func getSoundingSnapshot(client soundingQuerier) (SoundingSnapshotOutput, error)
 		tracks[t].Devices = devs
 	}
 
+	// Bonus: an old patch just leaves the levels out.
+	if levels, err := queryTrackVolumesDB(client); err == nil {
+		for t := range tracks {
+			if t < len(levels) {
+				tracks[t].VolumeDB = levels[t].Display
+			}
+		}
+	}
 	out.Tracks = tracks
 	return out, nil
 }
 
 func NewAbletonGetSoundingSnapshot(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
 	return genkit.DefineTool(g, "ableton_get_sounding_snapshot",
-		"Ableton Live: full picture of what is currently set up to sound — tempo, playback, scene names, and per-track mute/solo/playing slot, device chain, and which scenes currently have clips. Use when resuming a session or when the request depends on the current arrangement; skip it for a single targeted change. Covers more than ableton_get_session_snapshot.",
+		"Ableton Live: full picture of what is currently set up to sound — tempo, playback, scene names, and per-track mute/solo/volume in dB/playing slot, device chain, and which scenes currently have clips. Use when resuming a session or when the request depends on the current arrangement; skip it for a single targeted change. Covers more than ableton_get_session_snapshot.",
 		func(_ *ai.ToolContext, _ struct{}) (SoundingSnapshotOutput, error) {
 			return getSoundingSnapshot(client)
 		},

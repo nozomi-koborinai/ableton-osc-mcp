@@ -23,11 +23,14 @@ type MeterOutput struct {
 }
 
 type MasterVolumeOutput struct {
-	Volume float64 `json:"volume" jsonschema:"description=Master volume (0.0=silence\\, ~0.85=0dB)"`
+	Volume  float64 `json:"volume" jsonschema:"description=Master volume\\, raw (0.0=silence\\, ~0.85=0dB)"`
+	Display string  `json:"display,omitempty" jsonschema:"description=The level as Live shows it\\, e.g. -3.0 dB (needs the dB mixer patch)"`
 }
 
 type SetMasterVolumeInput struct {
-	Volume float64 `json:"volume" jsonschema:"description=Master volume (0.0=silence\\, ~0.85=0dB),minimum=0,maximum=1"`
+	Volume  *float64 `json:"volume,omitempty" jsonschema:"description=Raw master volume 0.0-1.0 (~0.85 = 0 dB). Give exactly one of volume\\, db\\, delta_db,minimum=0,maximum=1"`
+	DB      *float64 `json:"db,omitempty" jsonschema:"description=Absolute level in dB as Live displays it (e.g. -3)"`
+	DeltaDB *float64 `json:"delta_db,omitempty" jsonschema:"description=Change from the current level in dB"`
 }
 
 type MasterDevicesOutput struct {
@@ -102,36 +105,48 @@ func NewAbletonGetMasterMeter(g *genkit.Genkit, client *abletonosc.Client) ai.To
 }
 
 func NewAbletonGetMasterVolume(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
-	return genkit.DefineTool(g, "ableton_get_master_volume", "Ableton Live: get master volume (requires master patch)",
+	return genkit.DefineTool(g, "ableton_get_master_volume", "Ableton Live: get master volume, raw and as Live displays it in dB (requires master patch)",
 		func(_ *ai.ToolContext, _ struct{}) (MasterVolumeOutput, error) {
-			res, err := client.Query("/live/master/get/volume")
-			if err != nil {
-				return MasterVolumeOutput{}, err
-			}
-			if err := ensureResponseLen(res, 1); err != nil {
-				return MasterVolumeOutput{}, err
-			}
-			v, err := abletonosc.AsFloat64(res[0])
-			if err != nil {
-				return MasterVolumeOutput{}, err
-			}
-			return MasterVolumeOutput{Volume: v}, nil
+			return getMasterVolume(client)
 		},
 	)
 }
 
+func getMasterVolume(client oscQuerier) (MasterVolumeOutput, error) {
+	res, err := client.Query("/live/master/get/volume")
+	if err != nil {
+		return MasterVolumeOutput{}, err
+	}
+	if err := ensureResponseLen(res, 1); err != nil {
+		return MasterVolumeOutput{}, err
+	}
+	v, err := abletonosc.AsFloat64(res[0])
+	if err != nil {
+		return MasterVolumeOutput{}, err
+	}
+	out := MasterVolumeOutput{Volume: v}
+	if level, err := queryMixerLevel(client, masterVolumeTarget()); err == nil {
+		out.Display = level.Display
+	}
+	return out, nil
+}
+
 func NewAbletonSetMasterVolume(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
-	return genkit.DefineTool(g, "ableton_set_master_volume", "Ableton Live: set master volume (requires master patch)",
-		func(_ *ai.ToolContext, input SetMasterVolumeInput) (SentOutput, error) {
-			if input.Volume < 0 || input.Volume > 1 {
-				return SentOutput{}, errors.New("volume must be between 0 and 1")
-			}
-			if err := client.Send("/live/master/set/volume", float32(input.Volume)); err != nil {
-				return SentOutput{}, err
-			}
-			return SentOutput{Sent: true}, nil
+	return genkit.DefineTool(g, "ableton_set_master_volume",
+		"Ableton Live: set master volume as dB (`db`), as a change in dB (`delta_db`), or as a raw position (`volume`). Returns the level Live now displays (requires master patch).",
+		func(_ *ai.ToolContext, input SetMasterVolumeInput) (MixerLevelOutput, error) {
+			return setMasterVolume(client, input)
 		},
 	)
+}
+
+func setMasterVolume(c mixerDBClient, input SetMasterVolumeInput) (MixerLevelOutput, error) {
+	level, err := applyLevelChange(c, masterVolumeTarget(),
+		levelChange{Raw: input.Volume, DB: input.DB, DeltaDB: input.DeltaDB}, "volume")
+	if err != nil {
+		return MixerLevelOutput{}, err
+	}
+	return MixerLevelOutput{Value: level.Raw, Display: level.Display}, nil
 }
 
 func NewAbletonGetMasterDevices(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {

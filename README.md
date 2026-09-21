@@ -24,7 +24,9 @@ This enables AI assistants (Claude, Cursor, etc.) to interact with Ableton Live 
 - A/B the same clip dry vs processed by bypassing FX (`ableton_compare_fx_bypass`)
 - Compare mix balance with snapshots you can restore
 - Match an audio clip to the project tempo with Warp (e.g. after loading a sample)
-- Analyze a local `.wav`, or reference-analyze an `http(s)`/YouTube URL, for duration, levels, BPM/key alternatives, chords, section map, rhythm density, rms_per_beat, band balance, match axes, and texture (URL streams in memory and is never saved; no melody extraction)
+- Analyze a local `.wav`/`.aif`, or reference-analyze an `http(s)`/YouTube URL, for duration, levels, BPM/key alternatives, chords, section map, rhythm density, rms_per_beat, band balance, match axes, texture, and a mix profile (integrated LUFS, true peak, crest, 9-band spectrum, per-band stereo width) (URL streams in memory and is never saved; no melody extraction)
+- Save a track's mix profile as a named reference (numbers only, never audio) and compare your own bounce against a weighted blend of references
+- Measure what Live is putting out — LUFS, true peak, crest, 9 bands, stereo width — from a Resampling pass, against saved references and per track group (`ableton_measure_mix`); no export dialog, no screen automation
 - Autogain tracks toward a target meter level while audio is playing
 - Diagnose AbletonOSC connection and browser/master patch readiness
 - Fire clip slots and send raw OSC for advanced control
@@ -49,6 +51,7 @@ This repo ships a small Remote Script patch under [`remote-script/`](remote-scri
 - `/live/song/get/return_tracks` (list return tracks for send indices)
 - `/live/device/get|set/input_routing_type|channel` (+ available lists) for Compressor sidechain
 - `/live/clip/envelope/get|set_steps|clear|clear_all` (+ `/live/clip/get/has_envelopes`) for Session clip automation
+- `/live/track/get/volume_db` · `volume_for_db` · `send_db` · `send_for_db`, `/live/song/get/track_volumes_db`, `/live/master/get/volume_db` · `volume_for_db` (mixer levels as Live displays them in dB, and the raw value for a dB target)
 
 Install steps: see [remote-script/README.md](remote-script/README.md).
 After applying the patch, **restart Ableton Live** (a full restart is required the first time; `/live/api/reload` alone is not enough).
@@ -271,7 +274,7 @@ Keep the lower-level tools for special cases:
 |---|---|
 | Create B without auditioning yet | `ableton_create_scene_energy_variation` |
 | Audition clips/scenes that already exist | `ableton_audition_ab` |
-| Mix balance A/B (volume deltas + restore) | `ableton_apply_mix_variation` → listen → record preference → `ableton_restore_mix_snapshot` |
+| Mix balance A/B (volume deltas in dB + restore) | `ableton_apply_mix_variation` → listen → record preference → `ableton_restore_mix_snapshot` |
 
 Mix is intentionally outside `ableton_compare_ab_variation` because it uses snapshots, not clip/scene slots.
 
@@ -307,6 +310,33 @@ Finally, a few **texture indicators** describe the mix objectively:
 URL sources are decoded in stereo so width can be measured, then downmixed for
 the rest of the analysis.
 
+Both tools also return a **mix profile** (`mix_profile`) for judging a mix
+against another: `lufs_integrated` (ITU-R BS.1770-4), `true_peak_dbtp` (4x
+oversampled), `crest_db`, `bands` (nine bands from 20 Hz to 16 kHz, each in dB
+relative to their total), and `width` (left/right correlation and side-minus-mid
+in three bands). It is measured over the whole file or window, not just the
+first minute. Pass `start_sec` / `end_sec` to skip a long intro or a fade.
+
+**Reference profiles.** `save_reference_as` keeps the numbers of an analysis —
+never the audio — under a name. `ableton_analyze_local_audio` then accepts
+`references: [{name, weight}]` and reports `reference`: per-band deltas (mine
+minus the blended reference), the bands more than 3 dB out, and the LUFS,
+crest and width differences. It reports differences and stops there; what to
+do about them is a decision for ears. References with vocals read high between
+1 and 8 kHz, and every comparison says so.
+
+Live on macOS records AIFF, so `.aif` files bounced inside Live are read
+directly (PCM 8/16/24/32-bit, `sowt`, and `fl32`).
+
+**Measuring inside Live.** `ableton_measure_mix` records Live's master output
+onto a muted `Measure` audio track (input: Resampling) and analyzes the file
+Live writes — no export dialog, no screen automation. Live records bar to bar,
+so the file is exactly the bars you asked for. While a pass runs, the tool
+disarms any other armed track and selects an unused scene row (Session Record
+would otherwise record on those tracks too, and launching a scene would stop the
+take); both are restored afterwards, and the recorded clip is deleted unless you
+ask to keep it. The audio files stay in the Live project's recordings folder.
+
 For production decisions (not melody extraction), both tools also return:
 - `bpm_alternatives` / `key_alternatives` — half/double tempo and second-best key when in range
 - `rhythm_density` — onsets per bar at the estimated tempo
@@ -314,7 +344,7 @@ For production decisions (not melody extraction), both tools also return:
 - `band_balance` — relative low / mid / high energy shares
 - `match_axes` — three observation axes (`drum_density`, `low_end_role`, `space_amount`) with short hints
 
-- `ableton_analyze_local_audio` — inspects a **local `.wav` path you already have**. No network access.
+- `ableton_analyze_local_audio` — inspects a **local `.wav` / `.aif` path you already have**. No network access.
 - `ableton_analyze_audio_url` — reference-analyzes an `http(s)` URL (e.g. YouTube). It streams the track through `yt-dlp` + `ffmpeg` **in memory, analyzes it, and discards it** — nothing is written to disk (bounded to ~15 min for safety).
 
 `ableton_analyze_audio_url` requires `yt-dlp` and `ffmpeg` on `PATH`; this server
@@ -352,11 +382,12 @@ sharing a position, so a block-chord sketch is a few lines of text.
 | `ableton_arm_track` | Arm/disarm for recording |
 | `ableton_get_track_input_routing` / `ableton_set_track_input_routing` | Input routing (e.g. Resampling) |
 | `ableton_set_monitoring` | Monitoring state (0=In 1=Auto 2=Off) |
-| `ableton_set_track_volume` | Set track volume |
+| `ableton_set_track_volume` | Set track volume as dB (`db`), a change in dB (`delta_db`), or a raw position; returns the level Live displays (dB needs the patch) |
 | `ableton_clip_read` / `ableton_clip_write` | Read and replace a MIDI clip's notes as clip notation |
 | `ableton_match_clip_tempo` | Enable Warp on an audio clip so it follows the project tempo (`beats` or `complex`) |
-| `ableton_analyze_local_audio` | Analyze a local `.wav` (BPM/key alternatives, density, rms_per_beat, band_balance, match_axes, sections, onset grid, texture). Rejects URLs; no melody/note extraction |
-| `ableton_analyze_audio_url` | Reference-analyze an `http(s)`/YouTube URL (same production fields as local, minus the full onset list). Streams via yt-dlp+ffmpeg in memory; requires yt-dlp+ffmpeg |
+| `ableton_analyze_local_audio` | Analyze a local `.wav`/`.aif` (BPM/key alternatives, density, rms_per_beat, band_balance, match_axes, sections, onset grid, texture, mix_profile). Optional window, `references` to compare against saved profiles, `save_reference_as` to keep the numbers. Rejects URLs; no melody/note extraction |
+| `ableton_analyze_audio_url` | Reference-analyze an `http(s)`/YouTube URL (same production fields and mix_profile as local, minus the full onset list). Optional window and `save_reference_as`. Streams via yt-dlp+ffmpeg in memory; requires yt-dlp+ffmpeg |
+| `ableton_list_reference_profiles` | List saved reference mix profiles (name, source, LUFS, crest, 9 bands) |
 | `ableton_compare_ab_variation` | Preferred A/B entry: create one drum/bass/scene variation, audition A→B, return a preference prompt |
 | `ableton_compare_fx_bypass` | Same-clip FX A/B: bypass audio/MIDI effects (dry) then restore prior active state (wet); record with `instrument=fx variation=bypass` |
 | `ableton_create_scene_energy_variation` | Create-only scene energy variation (lift / pullback); keeps B if fire fails |
@@ -396,7 +427,7 @@ sharing a position, so a block-chord sketch is a few lines of text.
 | `ableton_duplicate_track_for_processing` | Duplicate a track into a dry/wet pair (original stays dry, copy becomes processed) |
 | `ableton_get_return_tracks` | List return tracks (A/B/…) with send indices (requires browser patch) |
 | `ableton_create_return_track` | Create a new return track |
-| `ableton_get_track_sends` / `ableton_set_track_send` | Get/set send amounts to returns (~0..1; ~0.85 ≈ 0 dB) |
+| `ableton_get_track_sends` / `ableton_set_track_send` | Get/set send amounts to returns, raw or in dB (`db`, `delta_db`) |
 | `ableton_get_device_sidechain` / `ableton_set_device_sidechain` | Compressor sidechain input routing (Live 11+; requires browser patch) |
 | `ableton_find_browser_item` | Search Live Browser (requires patch) |
 | `ableton_list_browser_folder` | List Browser roots or folder children (requires patch) |
@@ -410,11 +441,12 @@ sharing a position, so a block-chord sketch is a few lines of text.
 | `ableton_autogain_tracks` | Iteratively adjust track volumes toward a target meter level |
 | `ableton_apply_mix_variation` | Mix A/B entry: apply small B volume changes and return the A snapshot |
 | `ableton_capture_mix_snapshot` / `ableton_restore_mix_snapshot` | Capture or restore track volumes for mix A/B |
-| `ableton_get_master_meter` / `ableton_get_master_volume` / `ableton_set_master_volume` | Master meter/volume (requires master patch) |
+| `ableton_get_master_meter` / `ableton_get_master_volume` / `ableton_set_master_volume` | Master meter/volume, raw or in dB (requires master patch) |
 | `ableton_get_master_devices` / `ableton_get_master_device_parameters` / `ableton_set_master_device_parameter` | Master devices (requires master patch) |
 | `ableton_load_on_master` | Load Browser item onto master (requires browser+master patch) |
 | `ableton_get_session_record` / `ableton_set_session_record` | Session Record on/off |
-| `ableton_bounce_session_pass` | Record a scene pass onto a Bounce track via Resampling (tens of seconds; does not export WAV) |
+| `ableton_bounce_session_pass` | Record a scene pass onto a Bounce track via Resampling and return the audio file Live wrote (real time; not a rendered export) |
+| `ableton_measure_mix` | Record N bars of Live's output and measure them (LUFS, true peak, crest, 9 bands, width), optionally against saved reference profiles and per track group; deletes its own clip afterwards (real time) |
 | `ableton_setup_drum_track` | Create MIDI drum track, load kit, fill clip with preset pattern (requires browser patch) |
 | `ableton_osc_send` | Send raw OSC message |
 
@@ -428,10 +460,14 @@ Once configured, you can ask your AI assistant:
 - "Compare a drum groove variation of clip 0 into empty slot 1, then ask which I prefer"
 - "Check my taste profile and run the least-tried bass comparison next"
 - "I prefer the variation; save that and suggest what to compare next"
-- "Create a mix B with the bass 0.05 lower, let me listen, then restore A"
+- "Create a mix B with the bass 1.5 dB lower, let me listen, then restore A"
+- "Turn the 808 down 2 dB and set the pad to -24 dB"
 - "Humanize the drum clip with a bit of swing"
 - "Warp that audio sample to the project tempo"
 - "Analyze this local wav and tell me its BPM and how many bars it is at 128"
+- "Analyze this YouTube track from 0:20 to 1:30 and keep it as the reference 'envy'"
+- "Compare my bounce at ~/Music/mix_v3.aif with references envy (0.6) and crayon (0.4)"
+- "Measure 8 bars of the hook scene against references envy (0.6) and crayon (0.4), with drums, 808 and tops as groups"
 - "Autogain the drum and bass tracks while the beat is playing"
 - "Search my local Splice library for a punchy kick and load one onto an audio track"
 - "Find drum kits named Street in the browser"
@@ -473,6 +509,7 @@ In most cases, the default settings work fine. Change these only if:
 | `ABLETON_OSC_CLIENT_PORT` | `11001` | Port for receiving replies |
 | `ABLETON_OSC_TIMEOUT_MS` | `500` | Query timeout in milliseconds |
 | `ABLETON_OSC_TASTE_PROFILE_PATH` | OS user config directory / `ableton-osc-mcp/taste-profile.json` | Local path for saved A/B preferences |
+| `ABLETON_OSC_REFERENCE_PROFILES_PATH` | OS user config directory / `ableton-osc-mcp/reference-profiles.json` | Local path for saved reference mix profiles (numbers only) |
 | `ABLETON_OSC_SPLICE_PATH` | _(auto: `~/Splice` or `~/Documents/Splice`)_ | Local Splice content folder for sample search/load |
 
 </details>

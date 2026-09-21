@@ -10,7 +10,7 @@ import (
 func TestAnalyzeLocalAudioRejectsURL(t *testing.T) {
 	t.Parallel()
 
-	_, err := analyzeLocalAudio(AnalyzeLocalAudioInput{Path: "https://youtube.com/watch?v=abc"})
+	_, err := analyzeLocalAudio(AnalyzeLocalAudioInput{Path: "https://youtube.com/watch?v=abc"}, nil)
 	if err == nil {
 		t.Fatal("expected URL rejection")
 	}
@@ -22,7 +22,7 @@ func TestAnalyzeLocalAudioWAV(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "tone.wav")
 	writeSilentWAV(t, path, 44100, 1)
 	tempo := 128.0
-	got, err := analyzeLocalAudio(AnalyzeLocalAudioInput{Path: path, ProjectTempo: &tempo})
+	got, err := analyzeLocalAudio(AnalyzeLocalAudioInput{Path: path, ProjectTempo: &tempo}, nil)
 	if err != nil {
 		t.Fatalf("analyzeLocalAudio() error = %v", err)
 	}

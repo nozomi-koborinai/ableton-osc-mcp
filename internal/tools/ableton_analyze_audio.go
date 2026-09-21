@@ -5,11 +5,16 @@ import (
 	"github.com/firebase/genkit/go/genkit"
 
 	"github.com/nozomi-koborinai/ableton-osc-mcp/internal/audioanalyze"
+	"github.com/nozomi-koborinai/ableton-osc-mcp/internal/reference"
 )
 
 type AnalyzeLocalAudioInput struct {
-	Path         string   `json:"path" jsonschema:"description=Absolute local path to a .wav file you already have (no URLs)"`
-	ProjectTempo *float64 `json:"project_tempo,omitempty" jsonschema:"description=Optional project BPM to estimate length in bars,minimum=20,maximum=400"`
+	Path            string             `json:"path" jsonschema:"description=Absolute local path to a .wav\\, .aif or .aiff file you already have (no URLs)"`
+	ProjectTempo    *float64           `json:"project_tempo,omitempty" jsonschema:"description=Optional project BPM to estimate length in bars,minimum=20,maximum=400"`
+	StartSec        *float64           `json:"start_sec,omitempty" jsonschema:"description=Optional window start in seconds; everything reported then describes the window,minimum=0"`
+	EndSec          *float64           `json:"end_sec,omitempty" jsonschema:"description=Optional window end in seconds\\, at least 1 s after start_sec,minimum=0"`
+	References      []reference.Weight `json:"references,omitempty" jsonschema:"description=Saved reference profiles to compare mix_profile against\\, blended by weight"`
+	SaveReferenceAs string             `json:"save_reference_as,omitempty" jsonschema:"description=Keep this file's numbers (never audio) as a reference profile under this name; 1-40 characters from a-z\\, 0-9\\, '-' and '_'. Writes to disk"`
 }
 
 type AnalyzeLocalAudioOutput struct {
@@ -40,28 +45,49 @@ type AnalyzeLocalAudioOutput struct {
 	BrightnessHz      float64                        `json:"brightness_hz,omitempty"`
 	CrestFactorDB     float64                        `json:"crest_factor_db,omitempty"`
 	StereoWidth       float64                        `json:"stereo_width"`
+	RangeStartSec     float64                        `json:"range_start_sec,omitempty"`
+	RangeEndSec       float64                        `json:"range_end_sec,omitempty"`
+	MixProfile        *audioanalyze.MixProfile       `json:"mix_profile,omitempty"`
+	Reference         *reference.Comparison          `json:"reference,omitempty" jsonschema:"description=mix_profile measured against the blended references; differences only\\, no prescription"`
+	SavedReference    string                         `json:"saved_reference,omitempty"`
 	LengthBarsAtBPM   float64                        `json:"length_bars_at_project_tempo,omitempty"`
 	Note              string                         `json:"note"`
 	NextStep          string                         `json:"next_step"`
 }
 
-func NewAbletonAnalyzeLocalAudio(g *genkit.Genkit) ai.Tool {
+func NewAbletonAnalyzeLocalAudio(g *genkit.Genkit, store referenceStore) ai.Tool {
 	return genkit.DefineTool(g, "ableton_analyze_local_audio",
-		"Analyze a local .wav for sampling placement: duration/levels, BPM (+ half/double alternatives), key/scale (+ alternative), chords, section map, onset grid {beat,sec,strength}, rhythm_density, rms_per_beat, band_balance (low/mid/high), match_axes (density/low-end/space), and texture (brightness/dynamics/stereo). No URLs, no melody/note extraction.",
+		"Analyze a local .wav/.aif for sampling placement and mix comparison: duration/levels, BPM (+ half/double alternatives), key/scale (+ alternative), chords, section map, onset grid {beat,sec,strength}, rhythm_density, rms_per_beat, band_balance, match_axes, texture, and mix_profile (integrated LUFS, true peak, crest, 9-band spectrum in dB, per-band stereo width). `references` compares mix_profile with saved reference profiles and returns per-band deltas. `save_reference_as` writes the numbers (never audio) to the reference profile file on disk — set it only when the person asked to keep this track as a reference. No URLs, no melody/note extraction.",
 		func(_ *ai.ToolContext, input AnalyzeLocalAudioInput) (AnalyzeLocalAudioOutput, error) {
-			return analyzeLocalAudio(input)
+			return analyzeLocalAudio(input, store)
 		},
 	)
 }
 
-func analyzeLocalAudio(input AnalyzeLocalAudioInput) (AnalyzeLocalAudioOutput, error) {
-	projectTempo := 0.0
-	if input.ProjectTempo != nil {
-		projectTempo = *input.ProjectTempo
-	}
-	got, err := audioanalyze.AnalyzeFile(input.Path, projectTempo)
+func analyzeLocalAudio(input AnalyzeLocalAudioInput, store referenceStore) (AnalyzeLocalAudioOutput, error) {
+	saveAs, err := checkReferenceName(store, input.SaveReferenceAs)
 	if err != nil {
 		return AnalyzeLocalAudioOutput{}, err
+	}
+	refMix, blend, err := blendReferences(store, input.References)
+	if err != nil {
+		return AnalyzeLocalAudioOutput{}, err
+	}
+
+	got, err := audioanalyze.AnalyzeFile(input.Path, analysisOptions(input.ProjectTempo, input.StartSec, input.EndSec))
+	if err != nil {
+		return AnalyzeLocalAudioOutput{}, wrapUnsupportedFormat(err)
+	}
+
+	var comparison *reference.Comparison
+	if refMix != nil && got.MixProfile != nil {
+		c := reference.Compare(*got.MixProfile, *refMix, blend)
+		comparison = &c
+	}
+	if saveAs != "" {
+		if err := saveReference(store, saveAs, "file", got.Path, got); err != nil {
+			return AnalyzeLocalAudioOutput{}, err
+		}
 	}
 	return AnalyzeLocalAudioOutput{
 		Path:              got.Path,
@@ -91,6 +117,11 @@ func analyzeLocalAudio(input AnalyzeLocalAudioInput) (AnalyzeLocalAudioOutput, e
 		BrightnessHz:      got.BrightnessHz,
 		CrestFactorDB:     got.CrestFactorDB,
 		StereoWidth:       got.StereoWidth,
+		RangeStartSec:     got.RangeStartSec,
+		RangeEndSec:       got.RangeEndSec,
+		MixProfile:        got.MixProfile,
+		Reference:         comparison,
+		SavedReference:    saveAs,
 		LengthBarsAtBPM:   got.LengthBarsAtBPM,
 		Note:              got.Note,
 		NextStep:          "Use match_axes + band_balance for arrangement decisions; for chop placement use onsets/rms_per_beat. If loading into Live, call ableton_match_clip_tempo with suggested_warp_mode.",

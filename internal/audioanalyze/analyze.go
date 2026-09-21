@@ -29,6 +29,52 @@ type Onset struct {
 	Strength float64 `json:"strength"`
 }
 
+// MinWindowSec is the shortest stretch of audio worth analyzing. Callers that
+// decide the window themselves (a recording of N bars) should check against it
+// before doing the work.
+const MinWindowSec = 1.0
+
+// Options narrows and annotates one analysis run.
+type Options struct {
+	ProjectTempo float64 // project BPM for length_bars_at_project_tempo; 0 when unknown
+	StartSec     float64 // window start in seconds; 0 means from the beginning
+	EndSec       float64 // window end in seconds; 0 means to the end
+}
+
+// applyWindow cuts the decoded audio down to [StartSec, EndSec). It returns the
+// window actually used, or a zero window when none was asked for.
+func applyWindow(audio wavAudio, opts Options) (wavAudio, [2]float64, error) {
+	if opts.StartSec == 0 && opts.EndSec == 0 {
+		return audio, [2]float64{}, nil
+	}
+	if opts.StartSec < 0 || opts.EndSec < 0 {
+		return wavAudio{}, [2]float64{}, errors.New("start_sec and end_sec must be >= 0")
+	}
+	if opts.EndSec != 0 && opts.EndSec <= opts.StartSec {
+		return wavAudio{}, [2]float64{}, errors.New("end_sec must be greater than start_sec")
+	}
+	total := float64(len(audio.mono)) / float64(audio.sampleRate)
+	if opts.StartSec >= total {
+		return wavAudio{}, [2]float64{}, fmt.Errorf("start_sec %.2f is past the end of the audio (%.2f s)", opts.StartSec, total)
+	}
+	end := opts.EndSec
+	if end == 0 || end > total {
+		end = total
+	}
+	if end-opts.StartSec < MinWindowSec {
+		return wavAudio{}, [2]float64{}, errors.New("analysis window must be at least 1 second")
+	}
+	from := int(opts.StartSec * float64(audio.sampleRate))
+	to := int(end * float64(audio.sampleRate))
+	if to > len(audio.mono) {
+		to = len(audio.mono)
+	}
+	audio.mono = audio.mono[from:to]
+	audio.left = audio.left[from:to]
+	audio.right = audio.right[from:to]
+	return audio, [2]float64{opts.StartSec, end}, nil
+}
+
 type Result struct {
 	Path              string            `json:"path"`
 	Format            string            `json:"format"`
@@ -57,13 +103,38 @@ type Result struct {
 	BrightnessHz      float64           `json:"brightness_hz,omitempty"`
 	CrestFactorDB     float64           `json:"crest_factor_db,omitempty"`
 	StereoWidth       float64           `json:"stereo_width"`
+	RangeStartSec     float64           `json:"range_start_sec,omitempty" jsonschema:"description=Set when a window was requested; everything reported describes the window"`
+	RangeEndSec       float64           `json:"range_end_sec,omitempty"`
+	MixProfile        *MixProfile       `json:"mix_profile,omitempty"`
 	LengthBarsAtBPM   float64           `json:"length_bars_at_project_tempo,omitempty"`
 	Note              string            `json:"note"`
 }
 
-// AnalyzeFile analyzes a local WAV file already present on disk. It never
+// ProbeDuration decodes a local WAV or AIFF file and returns its length in
+// seconds, without running any analysis.
+func ProbeDuration(path string) (float64, error) {
+	abs, err := validateLocalAudioPath(path)
+	if err != nil {
+		return 0, err
+	}
+	f, err := os.Open(abs)
+	if err != nil {
+		return 0, fmt.Errorf("open audio file: %w", err)
+	}
+	defer func() { _ = f.Close() }()
+	audio, _, err := loadAudio(io.LimitReader(f, maxFileBytes+1))
+	if err != nil {
+		return 0, err
+	}
+	if audio.sampleRate <= 0 {
+		return 0, errors.New("no audio samples decoded")
+	}
+	return float64(len(audio.mono)) / float64(audio.sampleRate), nil
+}
+
+// AnalyzeFile analyzes a local WAV or AIFF file already present on disk. It never
 // downloads or writes audio; callers must supply audio they have rights to use.
-func AnalyzeFile(path string, projectTempo float64) (Result, error) {
+func AnalyzeFile(path string, opts Options) (Result, error) {
 	abs, err := validateLocalAudioPath(path)
 	if err != nil {
 		return Result{}, err
@@ -89,7 +160,7 @@ func AnalyzeFile(path string, projectTempo float64) (Result, error) {
 	}
 	defer func() { _ = f.Close() }()
 
-	out, err := analyzeWAVStream(f, projectTempo)
+	out, err := analyzeStream(f, opts)
 	if err != nil {
 		return Result{}, err
 	}
@@ -98,19 +169,24 @@ func AnalyzeFile(path string, projectTempo float64) (Result, error) {
 	return out, nil
 }
 
-// analyzeWAVStream decodes WAV audio from r and computes sampling-oriented
-// metadata. Path and Note are left for the caller to fill in per source.
-func analyzeWAVStream(r io.Reader, projectTempo float64) (Result, error) {
-	audio, err := loadWAV(io.LimitReader(r, maxFileBytes+1))
+// analyzeStream decodes WAV or AIFF audio from r and computes sampling- and
+// mix-oriented metadata. Path and Note are left for the caller to fill in.
+func analyzeStream(r io.Reader, opts Options) (Result, error) {
+	audio, format, err := loadAudio(io.LimitReader(r, maxFileBytes+1))
 	if err != nil {
 		return Result{}, err
 	}
+	if len(audio.mono) == 0 || audio.sampleRate <= 0 {
+		return Result{}, errors.New("no audio samples decoded")
+	}
+	audio, window, err := applyWindow(audio, opts)
+	if err != nil {
+		return Result{}, err
+	}
+	projectTempo := opts.ProjectTempo
 	mono := audio.mono
 	sampleRate := audio.sampleRate
 	channels := audio.channels
-	if len(mono) == 0 || sampleRate <= 0 {
-		return Result{}, errors.New("no audio samples decoded")
-	}
 
 	duration := float64(len(mono)) / float64(sampleRate)
 	peak, rms := levels(mono)
@@ -127,7 +203,7 @@ func analyzeWAVStream(r io.Reader, projectTempo float64) (Result, error) {
 	}
 
 	out := Result{
-		Format:            "wav",
+		Format:            format,
 		DurationSec:       duration,
 		SampleRate:        sampleRate,
 		Channels:          channels,
@@ -184,6 +260,12 @@ func analyzeWAVStream(r io.Reader, projectTempo float64) (Result, error) {
 	}
 	out.Onsets = onsetList
 	out.MatchAxes = buildMatchAxes(out.RhythmDensity, bands, tex.StereoWidth, tex.CrestFactorDB)
+	mix := measureMix(audio.left, audio.right, sampleRate, channels)
+	out.MixProfile = &mix
+	if window != ([2]float64{}) {
+		out.RangeStartSec = round2(window[0])
+		out.RangeEndSec = round2(window[1])
+	}
 	if projectTempo > 0 && duration > 0 {
 		beats := duration * (projectTempo / 60)
 		out.LengthBarsAtBPM = beats / 4
@@ -203,9 +285,10 @@ func validateLocalAudioPath(path string) (string, error) {
 	if !filepath.IsAbs(path) {
 		return "", errors.New("path must be absolute")
 	}
-	ext := strings.ToLower(filepath.Ext(path))
-	if ext != ".wav" {
-		return "", errors.New("only local .wav files are supported in this version")
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".wav", ".aif", ".aiff":
+	default:
+		return "", errors.New("only local .wav, .aif, or .aiff files are supported")
 	}
 	return filepath.Clean(path), nil
 }
@@ -328,16 +411,22 @@ func downmix(chans [][]float64) []float64 {
 // decodeChannels splits interleaved PCM/float WAV data into per-channel float64
 // samples in [-1, 1].
 func decodeChannels(data []byte, channels, bitsPerSample int, audioFormat uint16) ([][]float64, error) {
-	if channels < 1 {
-		return nil, errors.New("invalid channel count")
-	}
 	bytesPerSample, decode, err := sampleDecoder(bitsPerSample, audioFormat)
 	if err != nil {
 		return nil, err
 	}
+	return deinterleave(data, channels, bytesPerSample, decode)
+}
+
+// deinterleave splits interleaved sample bytes into per-channel float64
+// samples using decode for one sample.
+func deinterleave(data []byte, channels, bytesPerSample int, decode func([]byte) float64) ([][]float64, error) {
+	if channels < 1 {
+		return nil, errors.New("invalid channel count")
+	}
 	frame := bytesPerSample * channels
 	if len(data) < frame {
-		return nil, errors.New("wav data too short")
+		return nil, errors.New("audio data too short")
 	}
 	n := len(data) / frame
 	out := make([][]float64, channels)

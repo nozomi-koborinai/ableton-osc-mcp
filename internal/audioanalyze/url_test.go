@@ -42,7 +42,7 @@ func TestValidateAudioURL(t *testing.T) {
 func TestAnalyzeURLRejectsBadURL(t *testing.T) {
 	t.Parallel()
 
-	if _, err := AnalyzeURL(context.Background(), "not-a-url", 0); err == nil {
+	if _, err := AnalyzeURL(context.Background(), "not-a-url", Options{}); err == nil {
 		t.Fatal("expected error for invalid URL")
 	}
 }
@@ -77,9 +77,9 @@ func TestAnalyzeWAVStreamReader(t *testing.T) {
 	t.Parallel()
 
 	buf := clickWAVBytes(t, 44100, 120, 4)
-	got, err := analyzeWAVStream(bytes.NewReader(buf), 120)
+	got, err := analyzeStream(bytes.NewReader(buf), Options{ProjectTempo: 120})
 	if err != nil {
-		t.Fatalf("analyzeWAVStream() error = %v", err)
+		t.Fatalf("analyzeStream() error = %v", err)
 	}
 	if got.SampleRate != 44100 || got.Channels != 1 {
 		t.Errorf("format = %#v", got)

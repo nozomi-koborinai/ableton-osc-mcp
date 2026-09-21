@@ -49,6 +49,7 @@ func readyDiagnoseStub() diagnoseQuerierStub {
 		"/live/song/get/return_tracks":                   {values: []interface{}{int32(0)}},
 		"/live/device/get/available_input_routing_types": {values: missingArgs},
 		"/live/clip/envelope/get":                        {values: missingArgs},
+		"/live/track/get/volume_db":                      {values: missingArgs},
 	}}
 }
 
@@ -231,5 +232,31 @@ func TestDiagnoseBusyReplyPortDoesNotBlameLiveOrPatches(t *testing.T) {
 		if strings.Contains(c.NextStep, "patch") {
 			t.Errorf("capability %s advises %q while the reply port is busy", c.Name, c.NextStep)
 		}
+	}
+}
+
+func TestDiagnoseReportsTheDBMixerCapability(t *testing.T) {
+	t.Parallel()
+
+	find := func(out DiagnoseOutput) *CapabilityInfo {
+		for i := range out.Capabilities {
+			if out.Capabilities[i].Name == "mixer_db" {
+				return &out.Capabilities[i]
+			}
+		}
+		return nil
+	}
+	settings := DiagnoseSettings{Host: "127.0.0.1", Port: 11000, ClientPort: 11001, Timeout: 500 * time.Millisecond}
+
+	ready := find(diagnoseAbleton(readyDiagnoseStub(), settings))
+	if ready == nil || !ready.OK {
+		t.Fatalf("mixer_db with the handlers installed = %+v, want ok", ready)
+	}
+
+	old := readyDiagnoseStub()
+	delete(old.results, "/live/track/get/volume_db")
+	missing := find(diagnoseAbleton(old, settings))
+	if missing == nil || missing.OK || !strings.Contains(missing.NextStep, "master.py") {
+		t.Fatalf("mixer_db on an old patch = %+v, want not ok with a next step naming both patch files", missing)
 	}
 }
