@@ -130,6 +130,8 @@ func Register(g *genkit.Genkit, deps Deps) []ai.Tool {
 		NewAbletonGetSessionRecord(g, c),
 		NewAbletonSetSessionRecord(g, c),
 		NewAbletonBounceSessionPass(g, c),
+		NewAbletonWriteArrangement(g, c),
+		NewAbletonGetArrangement(g, c),
 		NewAbletonMeasureMix(g, c, deps.ReferenceStore),
 
 		// Recipes

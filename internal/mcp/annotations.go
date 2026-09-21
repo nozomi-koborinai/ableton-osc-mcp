@@ -68,6 +68,7 @@ var toolHints = map[string]hints{
 	"ableton_fire_clip_slot":                 {},
 	"ableton_fire_scene":                     {},
 	"ableton_get_clip_envelope":              {readOnly: true},
+	"ableton_get_arrangement":                {readOnly: true},
 	"ableton_get_clip_properties":            {readOnly: true},
 	"ableton_get_device_parameters":          {readOnly: true},
 	"ableton_get_device_sidechain":           {readOnly: true},
@@ -139,4 +140,5 @@ var toolHints = map[string]hints{
 	"ableton_stop_all_clips":                 {idempotent: true},
 	"ableton_stop_clip":                      {idempotent: true},
 	"ableton_test":                           {readOnly: true},
+	"ableton_write_arrangement":              {destructive: true, idempotent: true},
 }
