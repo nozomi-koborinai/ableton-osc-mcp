@@ -47,20 +47,33 @@ type SessionRecordOutput struct {
 }
 
 type BounceSessionPassInput struct {
-	SceneIndices []int  `json:"scene_indices,omitempty" jsonschema:"description=Scene indices to fire in order (default Intro/Verse/Hook/Bridge/Hook = 2\\,1\\,0\\,3\\,0)"`
-	BarsPerScene int    `json:"bars_per_scene,omitempty" jsonschema:"description=Bars to wait after each scene fire (default 4),minimum=1,maximum=64"`
-	TrackName    string `json:"track_name,omitempty" jsonschema:"description=Bounce destination track name (default Bounce)"`
+	Sections     []SongSection `json:"sections,omitempty" jsonschema:"description=The song as a list of sections\\, each a scene for so many bars\\, recorded in this order (1-64 sections\\, 400 bars in all). Use this or scene_indices\\, not both"`
+	TailBars     *int          `json:"tail_bars,omitempty" jsonschema:"description=Bars recorded after the last section\\, with every clip stopped\\, so reverb and delay can ring out (default 2 with sections\\, 0 with scene_indices),minimum=0,maximum=8"`
+	SceneIndices []int         `json:"scene_indices,omitempty" jsonschema:"description=Older form: scene indices to fire in order\\, all for bars_per_scene (default Intro/Verse/Hook/Bridge/Hook = 2\\,1\\,0\\,3\\,0)"`
+	BarsPerScene int           `json:"bars_per_scene,omitempty" jsonschema:"description=With scene_indices: bars to wait after each scene fire (default 4),minimum=1,maximum=64"`
+	TrackName    string        `json:"track_name,omitempty" jsonschema:"description=Bounce destination track name (default Bounce)"`
+}
+
+// BouncedSection says where a section sits in the recorded file.
+type BouncedSection struct {
+	Name       string  `json:"name"`
+	SceneIndex int     `json:"scene_index"`
+	Bars       int     `json:"bars"`
+	StartSec   float64 `json:"start_sec"`
 }
 
 type BounceSessionPassOutput struct {
-	OK           bool     `json:"ok"`
-	TrackIndex   int      `json:"track_index"`
-	TrackName    string   `json:"track_name"`
-	ScenesFired  []int    `json:"scenes_fired"`
-	BarsPerScene int      `json:"bars_per_scene"`
-	DurationSec  float64  `json:"duration_sec"`
-	RoutingType  string   `json:"routing_type"`
-	FilePaths    []string `json:"file_paths" jsonschema:"description=Audio files Live wrote for this pass; pass one to ableton_analyze_local_audio to measure it"`
+	OK           bool             `json:"ok"`
+	TrackIndex   int              `json:"track_index"`
+	TrackName    string           `json:"track_name"`
+	ScenesFired  []int            `json:"scenes_fired"`
+	BarsPerScene int              `json:"bars_per_scene,omitempty"`
+	Sections     []BouncedSection `json:"sections,omitempty"`
+	TailSec      float64          `json:"tail_sec,omitempty" jsonschema:"description=Length of the ring-out recorded after the last section"`
+	TempoBPM     float64          `json:"tempo_bpm"`
+	DurationSec  float64          `json:"duration_sec" jsonschema:"description=Length of the recorded file\\, tail included"`
+	RoutingType  string           `json:"routing_type"`
+	FilePaths    []string         `json:"file_paths" jsonschema:"description=Audio files Live wrote for this pass; pass one to ableton_analyze_local_audio to measure it\\, or to ableton_finalize_audio when the person wants a file to hand in"`
 }
 
 func NewAbletonCreateAudioTrack(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
@@ -209,7 +222,7 @@ func NewAbletonGetSessionRecord(g *genkit.Genkit, client *abletonosc.Client) ai.
 
 func NewAbletonBounceSessionPass(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
 	return genkit.DefineTool(g, "ableton_bounce_session_pass",
-		"Ableton Live: record a scene pass onto a Bounce audio track via Resampling and return the audio file Live wrote (leaves a Session clip; not a rendered export). Takes as long as the scenes play. Starts from a clean slate (Back to Arrangement, all clips stopped), and for the length of the pass disarms any other armed track, which it re-arms afterwards.",
+		"Ableton Live: record a pass of scenes onto a Bounce audio track via Resampling and return the audio file Live wrote (leaves a Session clip; not a rendered export). `sections` records a whole song — each section a scene for so many bars — and then keeps recording tail_bars with every clip stopped, so that reverb and delay ring out instead of being cut on the bar line. Runs in real time and blocks for the length of the song (54 bars at 143 BPM: a minute and a half), after up to a bar of waiting. Starts from a clean slate (Back to Arrangement, all clips stopped), and for the length of the pass disarms any other armed track, which it re-arms afterwards. The file is a raw 48 kHz recording: ableton_finalize_audio turns it into a delivery, when the person wants one.",
 		func(_ *ai.ToolContext, input BounceSessionPassInput) (BounceSessionPassOutput, error) {
 			return bounceSessionPass(client, recordDeps{
 				sleep: time.Sleep,
@@ -225,38 +238,82 @@ func NewAbletonBounceSessionPass(g *genkit.Genkit, client *abletonosc.Client) ai
 	)
 }
 
+const (
+	defaultSongTailBars = 2
+	maxSongTailBars     = 8
+)
+
 func bounceSessionPass(c recordClient, deps recordDeps, input BounceSessionPassInput) (BounceSessionPassOutput, error) {
-	scenes := input.SceneIndices
-	if len(scenes) == 0 {
-		scenes = []int{2, 1, 0, 3, 0} // Intro, Verse, Hook, Bridge, Hook
-	}
-	bars := input.BarsPerScene
-	if bars <= 0 {
-		bars = 4
-	}
 	trackName := strings.TrimSpace(input.TrackName)
 	if trackName == "" {
 		trackName = "Bounce"
 	}
+	out := BounceSessionPassOutput{OK: true, TrackName: trackName}
 
-	spans := make([]recordSpan, 0, len(scenes))
-	for i := range scenes {
-		spans = append(spans, recordSpan{SceneIndex: &scenes[i], Bars: bars})
+	var spans []recordSpan
+	tailBars := 0
+	if len(input.Sections) > 0 {
+		if len(input.SceneIndices) > 0 || input.BarsPerScene != 0 {
+			return BounceSessionPassOutput{}, invalidSongPlan("give sections, or scene_indices with bars_per_scene, not both")
+		}
+		if err := validateSongSections(input.Sections); err != nil {
+			return BounceSessionPassOutput{}, err
+		}
+		tailBars = defaultSongTailBars
+	} else {
+		out.BarsPerScene = input.BarsPerScene
+		if out.BarsPerScene <= 0 {
+			out.BarsPerScene = 4
+		}
 	}
+	if input.TailBars != nil {
+		if tailBars = *input.TailBars; tailBars < 0 || tailBars > maxSongTailBars {
+			return BounceSessionPassOutput{}, invalidSongPlan("tail_bars must be 0 to %d, got %d", maxSongTailBars, tailBars)
+		}
+	}
+
+	var sections []SongSection
+	if len(input.Sections) > 0 {
+		var err error
+		if sections, err = resolveSongSections(c, input.Sections); err != nil {
+			return BounceSessionPassOutput{}, err
+		}
+		for i := range sections {
+			out.ScenesFired = append(out.ScenesFired, sections[i].SceneIndex)
+			spans = append(spans, recordSpan{SceneIndex: &sections[i].SceneIndex, Bars: sections[i].Bars})
+		}
+	} else {
+		out.ScenesFired = input.SceneIndices
+		if len(out.ScenesFired) == 0 {
+			out.ScenesFired = []int{2, 1, 0, 3, 0} // Intro, Verse, Hook, Bridge, Hook
+		}
+		for i := range out.ScenesFired {
+			spans = append(spans, recordSpan{SceneIndex: &out.ScenesFired[i], Bars: out.BarsPerScene})
+		}
+	}
+	if tailBars > 0 {
+		spans = append(spans, recordSpan{StopClips: true, Bars: tailBars})
+	}
+
 	take, err := recordResampledPass(c, deps, recordPlan{TrackName: trackName, Spans: spans, StopClipsAtEnds: true})
 	if err != nil {
 		return BounceSessionPassOutput{}, err
 	}
-	return BounceSessionPassOutput{
-		OK:           true,
-		TrackIndex:   take.TrackIndex,
-		TrackName:    trackName,
-		ScenesFired:  scenes,
-		BarsPerScene: bars,
-		DurationSec:  take.WindowBeats * 60 / take.TempoBPM, // what was recorded, bar to bar
-		RoutingType:  take.RoutingType,
-		FilePaths:    take.FilePaths,
-	}, nil
+	secPerBar := float64(take.BeatsPerBar) * 60 / take.TempoBPM
+	bar := 0
+	for _, section := range sections {
+		out.Sections = append(out.Sections, BouncedSection{
+			Name: section.Name, SceneIndex: section.SceneIndex, Bars: section.Bars, StartSec: round2(float64(bar) * secPerBar),
+		})
+		bar += section.Bars
+	}
+	out.TrackIndex = take.TrackIndex
+	out.TailSec = round2(float64(tailBars) * secPerBar)
+	out.TempoBPM = take.TempoBPM
+	out.DurationSec = take.WindowBeats * 60 / take.TempoBPM // what was recorded, bar to bar
+	out.RoutingType = take.RoutingType
+	out.FilePaths = take.FilePaths
+	return out, nil
 }
 
 func ensureNamedAudioTrack(client recordClient, name string) (int, error) {

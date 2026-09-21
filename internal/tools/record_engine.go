@@ -22,10 +22,13 @@ type recordClient interface {
 }
 
 // recordSpan is one stretch of a pass: fire a scene (or keep what is playing)
-// and let it run for Bars.
+// and let it run for Bars. A StopClips span is how a song ends: on its
+// boundary every track but the recording one is told to stop, and the span
+// records what rings out.
 type recordSpan struct {
 	SceneIndex *int
 	Bars       int
+	StopClips  bool
 }
 
 type recordPlan struct {
@@ -75,9 +78,12 @@ func recordResampledPass(c recordClient, deps recordDeps, plan recordPlan) (take
 		return recordedTake{}, errors.New("at least one span is required")
 	}
 	launched := map[int]bool{}
-	for _, span := range plan.Spans {
+	for i, span := range plan.Spans {
 		if span.Bars < 1 || span.Bars > recordMaxBars {
 			return recordedTake{}, fmt.Errorf("bars must be between 1 and %d", recordMaxBars)
+		}
+		if span.StopClips && (i == 0 || span.SceneIndex != nil) {
+			return recordedTake{}, errors.New("a span that stops the clips follows something that plays, and fires no scene itself")
 		}
 		if span.SceneIndex != nil {
 			if *span.SceneIndex < 0 {
@@ -255,7 +261,7 @@ func recordResampledPass(c recordClient, deps recordDeps, plan recordPlan) (take
 	// Session Record and the first scene wait for the same bar line.
 	boundary := windowStart
 	for i, span := range plan.Spans {
-		if span.SceneIndex != nil {
+		if span.SceneIndex != nil || span.StopClips {
 			if i > 0 {
 				if err := waitUntilSongTime(c, deps.sleep, boundary-leadBeats, tempo); err != nil {
 					return recordedTake{}, err
@@ -264,8 +270,26 @@ func recordResampledPass(c recordClient, deps recordDeps, plan recordPlan) (take
 					return recordedTake{}, err
 				}
 			}
+		}
+		switch {
+		case span.SceneIndex != nil:
 			if err := c.Send("/live/scene/fire", int32(*span.SceneIndex)); err != nil {
 				return recordedTake{}, fmt.Errorf("fire scene %d: %w", *span.SceneIndex, err)
+			}
+		case span.StopClips:
+			// Track by track, and never the recording one: "stop all clips" would
+			// stop the take as well. A track stop waits for the bar line like a launch.
+			numTracks, err := queryNumTracks(c)
+			if err != nil {
+				return recordedTake{}, err
+			}
+			for track := 0; track < numTracks; track++ {
+				if track == trackIndex {
+					continue
+				}
+				if err := c.Send("/live/track/stop_all_clips", int32(track)); err != nil {
+					return recordedTake{}, fmt.Errorf("stop track %d: %w", track, err)
+				}
 			}
 		}
 		if i == 0 {
