@@ -11,7 +11,6 @@ import (
 
 const (
 	recordMaxBars        = 64
-	recordLeadSeconds    = 0.5 // act this long ahead of a bar line; 1-bar quantization lands it on the line
 	recordCheckBeats     = 0.5 // how far into the window to check that Live really is recording
 	recordFileSettleWait = 150 * time.Millisecond
 	recordFileSettleMax  = 20
@@ -96,9 +95,7 @@ func recordResampledPass(c recordClient, deps recordDeps, plan recordPlan) (take
 	if err != nil {
 		return recordedTake{}, err
 	}
-	// A command needs the same time to reach Live at any tempo, so the lead is
-	// set in seconds: at least a beat, and never the whole bar.
-	leadBeats := math.Min(math.Max(1, recordLeadSeconds*tempo/60), float64(beatsPerBar)-0.5)
+	leadBeats := barLeadBeats(tempo, beatsPerBar)
 	if plan.Spans[0].SceneIndex == nil {
 		playing, err := queryAuditionIsPlaying(c)
 		if err != nil {
@@ -246,17 +243,9 @@ func recordResampledPass(c recordClient, deps recordDeps, plan recordPlan) (take
 	}
 	// Commands take a moment to reach Live. Sent just before a bar line they
 	// land after it and wait a whole bar more, so let a close bar line go by.
-	recordOn, err := queryCurrentSongTime(c)
+	recordOn, windowStart, err := nextSafeBarLine(c, deps.sleep, tempo, beatsPerBar)
 	if err != nil {
 		return recordedTake{}, err
-	}
-	if next := ceilBarBeat(recordOn, beatsPerBar); next-recordOn < leadBeats {
-		if err := waitUntilSongTime(c, deps.sleep, next, tempo); err != nil {
-			return recordedTake{}, err
-		}
-		if recordOn, err = queryCurrentSongTime(c); err != nil {
-			return recordedTake{}, err
-		}
 	}
 	if err := c.Send("/live/song/set/session_record", int32(1)); err != nil {
 		return recordedTake{}, err
@@ -264,12 +253,14 @@ func recordResampledPass(c recordClient, deps recordDeps, plan recordPlan) (take
 	recording = true
 
 	// Session Record and the first scene wait for the same bar line.
-	windowStart := ceilBarBeat(recordOn, beatsPerBar)
 	boundary := windowStart
 	for i, span := range plan.Spans {
 		if span.SceneIndex != nil {
 			if i > 0 {
 				if err := waitUntilSongTime(c, deps.sleep, boundary-leadBeats, tempo); err != nil {
+					return recordedTake{}, err
+				}
+				if err := ensureStillPlaying(c); err != nil {
 					return recordedTake{}, err
 				}
 			}

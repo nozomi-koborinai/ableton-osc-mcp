@@ -3,17 +3,11 @@ package tools
 import (
 	"errors"
 	"fmt"
-	"math"
 
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/genkit"
 
 	"github.com/nozomi-koborinai/ableton-osc-mcp/internal/abletonosc"
-)
-
-const (
-	maxMixVariationDelta   = 0.2
-	maxMixVariationDeltaDB = 12.0
 )
 
 type MixSnapshotInput struct {
@@ -30,24 +24,8 @@ type MixSnapshotOutput struct {
 	Tracks []MixTrackLevel `json:"tracks"`
 }
 
-type MixVolumeChange struct {
-	TrackIndex int     `json:"track_index" jsonschema:"minimum=0"`
-	DeltaDB    float64 `json:"delta_db,omitempty" jsonschema:"description=Volume change for the B version in dB (-12 to 12). Give delta_db or delta\\, not both,minimum=-12,maximum=12"`
-	Delta      float64 `json:"delta,omitempty" jsonschema:"description=Raw volume change for the B version (-0.2 to 0.2),minimum=-0.2,maximum=0.2"`
-}
-
-type ApplyMixVariationInput struct {
-	Changes []MixVolumeChange `json:"changes" jsonschema:"description=One or more small volume changes for the B version"`
-}
-
-type ApplyMixVariationOutput struct {
-	Before           MixSnapshotOutput `json:"before" jsonschema:"description=Use this snapshot with ableton_restore_mix_snapshot to return to A"`
-	After            MixSnapshotOutput `json:"after"`
-	PreferencePrompt string            `json:"preference_prompt"`
-}
-
 type RestoreMixSnapshotInput struct {
-	Tracks []MixTrackLevel `json:"tracks" jsonschema:"description=Snapshot tracks returned by ableton_capture_mix_snapshot or ableton_apply_mix_variation"`
+	Tracks []MixTrackLevel `json:"tracks" jsonschema:"description=Snapshot tracks returned by ableton_capture_mix_snapshot"`
 }
 
 type mixABClient interface {
@@ -57,25 +35,16 @@ type mixABClient interface {
 
 func NewAbletonCaptureMixSnapshot(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
 	return genkit.DefineTool(g, "ableton_capture_mix_snapshot",
-		"Ableton Live: capture current track volumes (raw, and in dB as Live displays them) as an A/B mix snapshot",
+		"Ableton Live: capture current track volumes (raw, and in dB as Live displays them) as a snapshot to come back to with ableton_restore_mix_snapshot. Not needed around ableton_audition, which puts faders back by itself",
 		func(_ *ai.ToolContext, input MixSnapshotInput) (MixSnapshotOutput, error) {
 			return captureMixSnapshot(client, input.TrackIndices)
 		},
 	)
 }
 
-func NewAbletonApplyMixVariation(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
-	return genkit.DefineTool(g, "ableton_apply_mix_variation",
-		"Ableton Live: mix A/B entry — apply small track-volume changes for B (delta_db in dB, or a raw delta) and return the A snapshot (not covered by ableton_compare_ab_variation; restore with ableton_restore_mix_snapshot)",
-		func(_ *ai.ToolContext, input ApplyMixVariationInput) (ApplyMixVariationOutput, error) {
-			return applyMixVariation(client, input)
-		},
-	)
-}
-
 func NewAbletonRestoreMixSnapshot(g *genkit.Genkit, client *abletonosc.Client) ai.Tool {
 	return genkit.DefineTool(g, "ableton_restore_mix_snapshot",
-		"Ableton Live: restore track volumes from an A/B mix snapshot",
+		"Ableton Live: restore track volumes from a snapshot taken with ableton_capture_mix_snapshot",
 		func(_ *ai.ToolContext, input RestoreMixSnapshotInput) (MixSnapshotOutput, error) {
 			return restoreMixSnapshot(client, input.Tracks)
 		},
@@ -88,71 +57,6 @@ func captureMixSnapshot(client mixABClient, requested []int) (MixSnapshotOutput,
 		return MixSnapshotOutput{}, err
 	}
 	return captureMixTracks(client, indices)
-}
-
-func applyMixVariation(client mixABClient, input ApplyMixVariationInput) (ApplyMixVariationOutput, error) {
-	if len(input.Changes) == 0 {
-		return ApplyMixVariationOutput{}, errors.New("changes must not be empty")
-	}
-
-	indices := make([]int, 0, len(input.Changes))
-	changes := make(map[int]MixVolumeChange, len(input.Changes))
-	for _, change := range input.Changes {
-		if change.TrackIndex < 0 {
-			return ApplyMixVariationOutput{}, errors.New("changes track_index must be >= 0")
-		}
-		if (change.Delta == 0) == (change.DeltaDB == 0) {
-			return ApplyMixVariationOutput{}, fmt.Errorf("track %d: give delta_db or delta, one of them and not zero", change.TrackIndex)
-		}
-		if math.Abs(change.Delta) > maxMixVariationDelta {
-			return ApplyMixVariationOutput{}, fmt.Errorf("changes delta must be between -%.1f and %.1f", maxMixVariationDelta, maxMixVariationDelta)
-		}
-		if math.Abs(change.DeltaDB) > maxMixVariationDeltaDB {
-			return ApplyMixVariationOutput{}, fmt.Errorf("changes delta_db must be between -%.0f and %.0f", maxMixVariationDeltaDB, maxMixVariationDeltaDB)
-		}
-		if _, exists := changes[change.TrackIndex]; exists {
-			return ApplyMixVariationOutput{}, fmt.Errorf("duplicate track_index in changes: %d", change.TrackIndex)
-		}
-		indices = append(indices, change.TrackIndex)
-		changes[change.TrackIndex] = change
-	}
-
-	before, err := captureMixTracks(client, indices)
-	if err != nil {
-		return ApplyMixVariationOutput{}, err
-	}
-	// Work out every target first, so a dB request that cannot be resolved
-	// fails before any fader has moved.
-	afterTracks := make([]MixTrackLevel, 0, len(before.Tracks))
-	for _, track := range before.Tracks {
-		change := changes[track.TrackIndex]
-		target := clampMixVolume(track.Volume + change.Delta)
-		if change.DeltaDB != 0 {
-			level, err := queryMixerLevel(client, trackVolumeTarget(track.TrackIndex))
-			if err != nil {
-				return ApplyMixVariationOutput{}, err
-			}
-			if level.Silent {
-				return ApplyMixVariationOutput{}, actionable("delta_from_silence",
-					fmt.Sprintf("track %d is at -inf dB, so a dB change has nothing to start from", track.TrackIndex),
-					"Set an absolute level with ableton_set_track_volume first.")
-			}
-			target, err = resolveRawForDB(client, trackVolumeTarget(track.TrackIndex), level.DB+change.DeltaDB)
-			if err != nil {
-				return ApplyMixVariationOutput{}, err
-			}
-		}
-		afterTracks = append(afterTracks, MixTrackLevel{TrackIndex: track.TrackIndex, Volume: target})
-	}
-	if err := setMixTracksTransactionally(client, before.Tracks, afterTracks); err != nil {
-		return ApplyMixVariationOutput{}, err
-	}
-	fillVolumeDB(client, afterTracks)
-	return ApplyMixVariationOutput{
-		Before:           before,
-		After:            MixSnapshotOutput{Tracks: afterTracks},
-		PreferencePrompt: "After comparing A/B, record with ableton_record_variation_preference using instrument=mix variation=volume, then restore A with ableton_restore_mix_snapshot.",
-	}, nil
 }
 
 func restoreMixSnapshot(client mixABClient, tracks []MixTrackLevel) (MixSnapshotOutput, error) {
@@ -281,16 +185,6 @@ func validateMixTracks(tracks []MixTrackLevel) error {
 		seen[track.TrackIndex] = true
 	}
 	return nil
-}
-
-func clampMixVolume(volume float64) float64 {
-	if volume < 0 {
-		return 0
-	}
-	if volume > 1 {
-		return 1
-	}
-	return volume
 }
 
 func copyMixTracks(tracks []MixTrackLevel) []MixTrackLevel {

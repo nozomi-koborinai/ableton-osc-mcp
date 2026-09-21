@@ -20,9 +20,29 @@ type Preference struct {
 	RecordedAt time.Time `json:"recorded_at"`
 }
 
+// AuditionOption is one variant the listener heard in an audition.
+type AuditionOption struct {
+	Label       string `json:"label"`
+	Description string `json:"description"`
+}
+
+// AuditionChoice is what the listener picked out of an N-way audition. It
+// keeps every option they heard: a choice only means something next to what
+// it was chosen over.
+type AuditionChoice struct {
+	Topic      string           `json:"topic"`
+	Options    []AuditionOption `json:"options"`
+	Chosen     string           `json:"chosen"`
+	Note       string           `json:"note,omitempty"`
+	RecordedAt time.Time        `json:"recorded_at"`
+}
+
+// Profile is the file on disk. AuditionChoices came later and stays out of
+// files that have none, so the version is still 1 and older files read as is.
 type Profile struct {
-	Version     int          `json:"version"`
-	Preferences []Preference `json:"preferences"`
+	Version         int              `json:"version"`
+	Preferences     []Preference     `json:"preferences"`
+	AuditionChoices []AuditionChoice `json:"audition_choices,omitempty"`
 }
 
 type Store struct {
@@ -53,6 +73,24 @@ func (s *Store) Record(preference Preference) (Profile, error) {
 		preference.RecordedAt = time.Now().UTC()
 	}
 	profile.Preferences = append(profile.Preferences, preference)
+	if err := s.save(profile); err != nil {
+		return Profile{}, err
+	}
+	return profile, nil
+}
+
+func (s *Store) RecordAuditionChoice(choice AuditionChoice) (Profile, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	profile, err := s.load()
+	if err != nil {
+		return Profile{}, err
+	}
+	if choice.RecordedAt.IsZero() {
+		choice.RecordedAt = time.Now().UTC()
+	}
+	profile.AuditionChoices = append(profile.AuditionChoices, choice)
 	if err := s.save(profile); err != nil {
 		return Profile{}, err
 	}

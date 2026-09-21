@@ -288,7 +288,6 @@ func probeCapabilities(client diagnoseQuerier, diag DiagnoseOutput) []Capability
 		{"return_tracks_list", "/live/song/get/return_tracks", "Install/update the browser patch (return_tracks handler), then restart or hot-reload AbletonOSC."},
 		{"device_sidechain", "/live/device/get/available_input_routing_types", "Install/update the browser patch (device sidechain handlers), then restart or hot-reload AbletonOSC."},
 		{"clip_envelope", "/live/clip/envelope/get", "Install/update the browser patch (clip envelope handlers), then restart or hot-reload AbletonOSC."},
-		{"device_is_active", "/live/device/get/is_active", "Install/update the browser patch (device is_active handlers), then restart or hot-reload AbletonOSC."},
 		{"mixer_db", "/live/track/get/volume_db", "Copy remote-script/abletonosc/browser.py and master.py into AbletonOSC again (dB mixer handlers), then restart or hot-reload AbletonOSC."},
 	} {
 		ok := diag.BrowserPatch && handlerPresent(client, p.address)
