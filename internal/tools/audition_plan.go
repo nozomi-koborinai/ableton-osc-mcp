@@ -25,8 +25,8 @@ type auditionVariantState struct {
 }
 
 // auditionCommand is one OSC message. Quantized commands (clip fires and stops)
-// take effect on the next bar line and are sent ahead of it; the rest take
-// effect at once and are sent on the line.
+// take effect on the next bar line and are sent well ahead of it; the rest take
+// effect at once and are sent just before the line.
 type auditionCommand struct {
 	address   string
 	args      []interface{}

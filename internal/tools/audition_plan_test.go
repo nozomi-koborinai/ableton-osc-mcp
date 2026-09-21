@@ -9,7 +9,7 @@ import (
 func describeCommands(cmds []auditionCommand) []string {
 	out := make([]string, 0, len(cmds))
 	for _, c := range cmds {
-		when := "on the line"
+		when := "just before the line"
 		if c.quantized {
 			when = "ahead"
 		}
@@ -58,7 +58,7 @@ func TestCommandsBetweenSendsOnlyWhatDiffers(t *testing.T) {
 	// X -> B: one clip and one fader.
 	if got, want := describeCommands(commandsBetween(base, b)), []string{
 		"/live/clip_slot/fire [2 1] (ahead)",
-		"/live/track/set/volume [3 0.6] (on the line)",
+		"/live/track/set/volume [3 0.6] (just before the line)",
 	}; !reflect.DeepEqual(got, want) {
 		t.Errorf("X -> B = %v, want %v", got, want)
 	}
@@ -67,8 +67,8 @@ func TestCommandsBetweenSendsOnlyWhatDiffers(t *testing.T) {
 	if got, want := describeCommands(commandsBetween(b, c)), []string{
 		"/live/clip_slot/fire [2 0] (ahead)",
 		"/live/clip_slot/fire [5 2] (ahead)",
-		"/live/track/set/volume [3 0.85] (on the line)",
-		"/live/device/set/parameter/value [3 1 0 0] (on the line)",
+		"/live/track/set/volume [3 0.85] (just before the line)",
+		"/live/device/set/parameter/value [3 1 0 0] (just before the line)",
 	}; !reflect.DeepEqual(got, want) {
 		t.Errorf("B -> C = %v, want %v", got, want)
 	}
@@ -76,7 +76,7 @@ func TestCommandsBetweenSendsOnlyWhatDiffers(t *testing.T) {
 	// C -> X: track 5 was silent before the audition, so it is stopped rather than fired.
 	if got, want := describeCommands(commandsBetween(c, base)), []string{
 		"/live/track/stop_all_clips [5] (ahead)",
-		"/live/device/set/parameter/value [3 1 0 1] (on the line)",
+		"/live/device/set/parameter/value [3 1 0 1] (just before the line)",
 	}; !reflect.DeepEqual(got, want) {
 		t.Errorf("C -> X = %v, want %v", got, want)
 	}

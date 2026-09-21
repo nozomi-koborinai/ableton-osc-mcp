@@ -250,7 +250,7 @@ func (s *renameSpy) Send(address string, args ...interface{}) error {
 	return err
 }
 
-func TestAuditionFiresClipsAheadOfTheLineAndMovesFadersOnIt(t *testing.T) {
+func TestAuditionFiresClipsAheadOfTheLineAndMovesFadersJustBeforeIt(t *testing.T) {
 	t.Parallel()
 
 	live := newFakeAuditionLive()
