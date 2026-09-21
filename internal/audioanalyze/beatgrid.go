@@ -198,15 +198,16 @@ func buildBeatGridFrom(lanes onsetLanes, samples []float64, sampleRate int, opts
 	}
 
 	grid := BeatGrid{BPM: opts.BPM}
+	var anchor *float64 // a bar line that is known holds the beats in place
 	if opts.DownbeatSet {
-		grid.DownbeatSec = opts.DownbeatSec
-		grid.BeatOffsetSec = math.Mod(opts.DownbeatSec, grid.beatSec())
-		grid.DownbeatConfidence = 1
-	} else {
+		anchor = &opts.DownbeatSec
+	}
+	if !opts.ExactTempo || anchor == nil {
 		// An estimated tempo is often a simple ratio away from the real one (two
 		// thirds, on a swung drill beat). Each related tempo gets its best grid, and
 		// the one whose sixteenths the onsets actually sit on wins; the estimate
-		// itself stays unless another is clearly better.
+		// itself stays unless another is clearly better. Knowing where a bar starts
+		// says nothing about the tempo, so this runs with a pinned downbeat too.
 		everything := make([]float64, len(pulse))
 		for i := range everything {
 			everything[i] = pulse[i] + lanes.high[i]
@@ -223,12 +224,17 @@ func buildBeatGridFrom(lanes onsetLanes, samples []float64, sampleRate int, opts
 			if ratio != 1 && (centre < beatMinTempo || centre > beatMaxTempo) {
 				continue
 			}
-			bpm, phase := combBeats(pulse, sampleRate, durationSec, centre, opts.ExactTempo)
+			bpm, phase := combBeats(pulse, sampleRate, durationSec, centre, opts.ExactTempo, anchor)
 			if fit := sixteenthFit(everything, sampleRate, bpm, phase); fit > bestFit+beatFitMargin || bestFit < 0 {
 				bestFit, grid.BPM, grid.BeatOffsetSec = fit, bpm, phase
 			}
 		}
 		grid.BPM = round2(grid.BPM)
+	}
+	if anchor != nil {
+		grid.DownbeatSec, grid.DownbeatConfidence = *anchor, 1
+		grid.BeatOffsetSec = math.Mod(*anchor, grid.beatSec())
+	} else {
 		grid.DownbeatSec, grid.DownbeatConfidence = findDownbeat(samples, sampleRate, grid, low, opts.TuningCents)
 	}
 	grid.Bars = int(math.Floor((durationSec - grid.DownbeatSec) / (beatsPerBar * grid.beatSec())))
@@ -240,8 +246,9 @@ func buildBeatGridFrom(lanes onsetLanes, samples []float64, sampleRate int, opts
 }
 
 // combBeats finds tempo and phase together: every beat of a candidate grid,
-// summed. An estimated tempo is searched a little either side of itself.
-func combBeats(pulse []float64, sampleRate int, durationSec, centreBPM float64, exact bool) (float64, float64) {
+// summed. An estimated tempo is searched a little either side of itself; a
+// known bar line leaves only the tempo to find.
+func combBeats(pulse []float64, sampleRate int, durationSec, centreBPM float64, exact bool, anchor *float64) (float64, float64) {
 	hopSec := float64(fluxHopSize) / float64(sampleRate)
 	lowest, highest := centreBPM, centreBPM
 	if !exact {
@@ -250,7 +257,12 @@ func combBeats(pulse []float64, sampleRate int, durationSec, centreBPM float64, 
 	best, bestBPM, bestPhase := -1.0, centreBPM, 0.0
 	for bpm := lowest; bpm <= highest+1e-9; bpm += beatTempoStep {
 		beatSec := 60 / bpm
-		for phase := 0.0; phase < beatSec; phase += hopSec {
+		first, last := 0.0, beatSec
+		if anchor != nil { // one phase only: the one that puts a beat on the known bar line
+			first = math.Mod(*anchor, beatSec)
+			last = first + hopSec/2
+		}
+		for phase := first; phase < last; phase += hopSec {
 			score := 0.0
 			for at := phase; at < durationSec; at += beatSec {
 				score += envelopeAt(pulse, at, sampleRate)

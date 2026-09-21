@@ -218,3 +218,25 @@ func TestDeepAnalysisSurvivesUnusualSampleRates(t *testing.T) {
 		}
 	}
 }
+
+// Knowing where a bar starts says nothing about the tempo. With the downbeat
+// pinned and the tempo only estimated, the tempo still has to be searched:
+// among the related tempos, and a little either side, with the beats held to
+// the pinned bar line.
+func TestBeatGridStillSearchesTheTempoWhenOnlyTheDownbeatIsGiven(t *testing.T) {
+	t.Parallel()
+
+	beat := defaultTestBeat()
+	beat.bars = 16
+	beat.high = []int{0, 2, 3, 5, 6, 8, 11, 12, 15, 16, 18, 19, 21, 22, 24, 31}
+	samples := beat.render()
+	for name, estimate := range map[string]float64{"two thirds": 140 * 2.0 / 3, "a little off": 140.6} {
+		grid, ok := buildBeatGrid(samples, beat.sampleRate, beatGridOptions{BPM: estimate, DownbeatSec: beat.offsetSec, DownbeatSet: true})
+		if !ok || math.Abs(grid.BPM-140) > 0.3 {
+			t.Errorf("estimate %s (%.1f BPM): grid at %.2f BPM, want 140", name, estimate, grid.BPM)
+		}
+		if math.Abs(grid.DownbeatSec-beat.offsetSec) > 1e-3 || grid.DownbeatConfidence != 1 {
+			t.Errorf("estimate %s: downbeat at %.3f s with confidence %.2f, want the given one kept", name, grid.DownbeatSec, grid.DownbeatConfidence)
+		}
+	}
+}
