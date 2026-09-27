@@ -5,7 +5,7 @@ go 1.27.1
 require (
 	github.com/firebase/genkit/go v1.13.1
 	github.com/hypebeast/go-osc v0.0.0-20220308234300-cec5a8a1e5f5
-	github.com/mark3labs/mcp-go v1.1.0
+	github.com/mark3labs/mcp-go v1.1.1
 )
 
 require (
